@@ -1,0 +1,30 @@
+defaults:
+  - _self_
+  - data: temporal_gaussian_array_poisson
+  - model: alif
+
+experiment: Test
+# metric on which the model checkpointing and LR scheduler will rely
+monitored_metric: "val_acc_epoch"
+# improvement is made by maximization or minimization of the monitored metric
+monitor_mode: "max"
+learning_rate: 1e-2
+weight_decay: 0 
+spike_reg: 0 
+target_rate: [0.01, 0.4]
+seed_everything: 42
+max_epochs: 60
+gradient_clip_val: null
+log_every_n_epoch: 2
+accelerator: gpu
+
+result_dir: ./sim_results
+
+hydra:  
+  job:
+    chdir: true
+  run:
+    dir: ${result_dir}/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${result_dir}/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}

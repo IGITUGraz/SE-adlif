@@ -1,0 +1,17 @@
+name: Temporal Gaussian Array
+batch_size: 128
+num_workers: 8
+sampling_freq: 1000
+sample_len: 20
+min_num_sample: 5
+max_num_sample: 10
+delay_between_sample: 10
+num_sample_per_epoch: 1024
+S: 200
+n_channels: 20
+n_classes: 20
+n_common_channels: 10
+n_spikes: 10
+n_noise_spikes: 5
+val_split: 0.1
+test_split: 0.2

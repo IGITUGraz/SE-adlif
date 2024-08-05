@@ -1,0 +1,37 @@
+model_config:
+  _l1:
+    class: ALIFLayer
+    in_features: ${data.n_channels}
+    out_features: 30
+    thr: 1.0
+    tau_soma: [5.0, 25.0]
+    surrogate_kwargs:
+      alpha: 4.96
+      scale: 0.2
+    dt: 1
+    use_recurrent: True
+    use_bias: True
+    bias_init: 0.0
+    train_soma_tau_method: "interpolation"  # "linear"
+    train_adapt_tau_method: "interpolation"
+    train_beta: true
+    beta: [0.0, 1.0]
+    beta_init: uniform
+    train_beta2: true
+    beta2: [0.0, 2.0]
+    beta2_init: uniform
+    tau_adapt: [60.0, 300.0]
+    initialization_method: uniform
+    initialization_kwargs:
+      somatic_rec_gain: 1.0
+      somatic_gain: 1.0
+    adapt_coeff: 120.0
+
+  _l2:
+    class: LILayer
+    in_features: ${model.model_config._l1.out_features}
+    out_features: ${data.n_classes}
+    dt: 1
+    tau: [5.0, 15.0]
+    use_bias: true
+    train_tau_method: interpolation

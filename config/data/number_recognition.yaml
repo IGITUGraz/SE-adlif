@@ -1,0 +1,9 @@
+name: Number recognition
+batch_size: 32
+num_workers: 8
+sampling_freq: 1000
+sample_len: 20
+min_num_sample: 5
+max_num_sample: 10
+delay_between_sample: 10
+num_sample_per_epoch: 1024

@@ -1,0 +1,33 @@
+dataset: SHD
+model: SE-adLIF
+
+# learning rate of the optimizer
+lr: 0.01
+
+# number of neurons
+n_neurons: 128
+
+# number of layers
+n_layers: 2
+
+# Factor for reparametrization of a and b (see paper)
+q: 120
+
+# Parameters of SLAYER
+alpha: 5
+c: 0.4
+
+# Number of epochs
+n_epochs: 300
+
+# Range of tau_u
+tau_u_range: [5, 25]
+
+# Range of tau_w
+tau_w_range: [60, 300]
+
+# Dropout rate
+dropout: 0.15
+
+# Batch size
+batch_size: 256
