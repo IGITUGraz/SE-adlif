@@ -1,6 +1,7 @@
 
 from typing import Optional
 import matplotlib.pyplot as plt
+from models.helpers import SLAYER
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -40,59 +41,29 @@ class LIFLayer(BaseSNN):
         self.dt = 1
         self.tau_soma_range = tau_soma
         self.use_bias = use_bias
-        self.use_recurrent = use_recurrent
         self.thr = thr
         self.alpha = alpha
         self.c = c
-        self.bias_init = bias_init
-        
+
         self.weight = Parameter(
             torch.empty((out_features, in_features), **factory_kwargs)
         )
-        if self.use_bias:
-            self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
-        else:
-            self.register_buffer("bias", None)
-        if self.use_recurrent:
-            self.recurrent = Parameter(
+        self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
+        self.recurrent = Parameter(
                 torch.empty((out_features, out_features), **factory_kwargs)
             )
-        else:
-            self.register_buffer("recurrent", None)
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.tau_trainer.reset_parameters()
-        if self.initialization_method == "uniform":
-            torch.nn.init.uniform_(
-                self.weight,
-                -1.0 * torch.sqrt(1 / torch.tensor(self.in_features)),
-                torch.sqrt(1 / torch.tensor(self.in_features)),
-            )
-        elif self.initialization_method == "normal":
-            torch.nn.init.normal_(
-                self.weight, 0.1, torch.sqrt(1 / torch.tensor(self.in_features))
-            )
-        elif self.initialization_method == "uniform_half":
-            torch.nn.init.uniform_(
-                self.weight,
-                -1.0 * torch.sqrt(1 / torch.tensor(self.in_features)),
-                torch.sqrt(1 / torch.tensor(self.in_features)),
-            )
-        elif self.initialization_method == "orthogonal":
-            torch.nn.init.orthogonal_(
-                self.weight, gain=self.initialization_kwargs.get("somatic_gain", 1.0)
-            )
-        else:
-            raise NotImplementedError(
-                f"Initialization method {self.initialization_method} not implemented"
-            )
-        if self.bias is not None:
-            torch.nn.init.constant_(self.bias, self.bias_init)
-        # The following is not called, when there is no recurrent connections
+        torch.nn.init.uniform_(
+            self.weight,
+            -1.0 * torch.sqrt(1 / torch.tensor(self.in_features)),
+            torch.sqrt(1 / torch.tensor(self.in_features)),
+        )
+        torch.nn.init.constant_(self.bias, self.bias_init)
         torch.nn.init.orthogonal_(
             self.recurrent,
-            gain=self.initialization_kwargs.get("somatic_rec_gain", 1.0),
+            gain=1.0,
         )
 
     def initial_state(
@@ -103,7 +74,6 @@ class LIFLayer(BaseSNN):
             size=size, device=device, dtype=torch.float, requires_grad=True
         )
         z = torch.zeros(size=size, device=device, dtype=torch.float, requires_grad=True)
-
         return vs, z
 
     def forward(self, input_tensor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -119,17 +89,17 @@ class LIFLayer(BaseSNN):
         for i in range(input_tensor.size(1)):
             v_tm1 = v[-1]
             z_tm1 = z[-1]
-            v_tm1 = self.reset_func(v_tm1, z_tm1)
+            v_tm1 = v_tm1 * (1 - z_tm1)
 
             soma_current = F.linear(input_tensor[:, i], self.weight, self.bias)
-            if self.use_recurrent:
-                soma_rec_current = F.linear(z_tm1, self.recurrent, None)
-                soma_current += soma_rec_current
+            soma_rec_current = F.linear(z_tm1, self.recurrent, None)
+            soma_current += soma_rec_current
 
             v_t = decay_vs * v_tm1 + (1.0 - decay_vs) * (soma_current)
-            v_scaled = (v_t - self.thr) / self.thr
 
-            z_t = self.threshold_func(v_scaled, self.surrogate_kwargs)
+            v_thr = v_t - self.thr
+            # Forward Gradient Injection trick (credits to Sebastian Otte)
+            z_t = torch.heaviside(v_thr, 1.0).detach() + (v_thr - v_thr.detach()) * SLAYER(v_thr, self.alpha, self.c).detach()
 
             outputs.append(z_t)
             v.append(v_t)
@@ -141,80 +111,6 @@ class LIFLayer(BaseSNN):
         outputs = torch.stack(outputs, dim=1)
         return outputs, states
 
-    @torch.jit.export
-    def extra_repr(self) -> str:
-        return "in_features={}, out_features={}, bias={}, rec={}".format(
-            self.in_features,
-            self.out_features,
-            self.bias is not None,
-            self.recurrent is not None,
-        )
-
-    @staticmethod
-    def plot_states(layer_idx, inputs, states):
-        figure, axes = plt.subplots(nrows=3, ncols=1, sharex="all", figsize=(8, 11))
-        inputs = inputs.cpu().detach().numpy()
-        states = states.cpu().detach().numpy()
-        axes[0].eventplot(
-            get_event_indices(inputs.T), color="black", orientation="horizontal"
-        )
-        axes[0].set_ylabel("input")
-        axes[1].plot(states[0])
-        axes[1].set_ylabel("v_t")
-        axes[2].eventplot(
-            get_event_indices(states[1].T), color="black", orientation="horizontal"
-        )
-        axes[2].set_ylabel("z_t/output")
-        nb_spikes_str = str(states[1].sum())
-        figure.suptitle(f"Layer {layer_idx}\n Nb spikes: {nb_spikes_str},")
-        plt.close(figure)
-        return figure
-
-    @torch.jit.ignore
-    def layer_stats(
-        self,
-        layer_idx: int,
-        logger,
-        epoch_step: int,
-        spike_probabilities: torch.Tensor,
-        inputs: torch.Tensor,
-        states: torch.Tensor,
-        **kwargs,
-    ):
-        """Generate statistisc from the layer weights and a plot of the layer dynamics for a random task example
-        Args:
-            layer_idx (int): index for the layer in the hierarchy
-            logger (_type_): aim logger reference
-            epoch_step (int): epoch
-            spike_probability (torch.Tensor): spike probability for each neurons
-            inputs (torch.Tensor): random example
-            states (torch.Tensor): states associated to the computation of the random example
-        """
-
-        save_fig_to_aim(
-            logger=logger,
-            name=f"{layer_idx}_Activity",
-            figure=LIFLayer.plot_states(layer_idx, inputs, states),
-            epoch_step=epoch_step,
-        )
-
-        distributions = [
-            ("soma_tau", self.tau_trainer.get_tau().cpu().detach().numpy()),
-            ("soma_weights", self.weight.cpu().detach().numpy()),
-            ("spike_prob", spike_probabilities.cpu().detach().numpy()),
-            ("bias", self.bias.cpu().detach().numpy()),
-        ]
-
-        if self.use_recurrent:
-            distributions.append(
-                ("recurrent_weights", self.recurrent.cpu().detach().numpy())
-            )
-        save_distributions_to_aim(
-            logger=logger,
-            distributions=distributions,
-            name=f"{layer_idx}",
-            epoch_step=epoch_step,
-        )
 
     def apply_parameter_constraints(self):
-        self.tau_trainer.apply_parameter_constraints()
+        self.
