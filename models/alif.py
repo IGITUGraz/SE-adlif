@@ -181,6 +181,7 @@ class EFAdLIF(Module):
         states = torch.stack([u, z, w], dim=0)
         outputs = torch.stack(outputs, dim=1)
         return outputs, states
+    
 class SEAdLIF(EFAdLIF):
     def forward(
         self, input_tensor: Tensor
@@ -208,7 +209,7 @@ class SEAdLIF(EFAdLIF):
                 soma_current - w_tm1
             )
             u_thr = u_t - self.thr
-            # Forward Gradient Injection trick (credits to Sebastian Otte)
+            # Forward Gradient Injection trick (credits to Sebastian Otte, arXiv:2406.00177)
             z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
             # Symplectic formulation with early reset
             u_t = u_t * (1 - z_t.detach())
