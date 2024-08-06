@@ -25,24 +25,7 @@ def main(cfg: DictConfig):
         cfg = OmegaConf.to_container(cfg, resolve=True)
         pl.seed_everything(cfg["seed_everything"], workers=True)
 
-        '''
-        data = MultiDigitAdditionDM(
-            **cfg["data"]
-            )
-
-        cfg_val = copy.deepcopy(cfg)
-        cfg_val["data"]["n_digits"] = cfg_val["data"]["n_digits"] + 5
-        data_val = MultiDigitAdditionDM(
-            **cfg_val["data"]
-            )
-        '''
-
-        data = TemporalGaussianArrayPoissonDM(
-            **cfg["data"]
-        )
-        data_val = TemporalGaussianArrayPoissonDM(
-            **cfg["data"]
-        )
+        datamodule = hydra.utils.instantiate(cfg["dataset"])
 
         model = MLPSNN(
             **cfg["model"],

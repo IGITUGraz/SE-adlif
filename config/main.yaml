@@ -1,24 +1,11 @@
 defaults:
   - _self_
-  - data: temporal_gaussian_array_poisson
-  - model: alif
+  - data: ???
+  - experiment: SHD_SE_adLIF_small
 
-experiment: Test
-# metric on which the model checkpointing and LR scheduler will rely
-monitored_metric: "val_acc_epoch"
-# improvement is made by maximization or minimization of the monitored metric
-monitor_mode: "max"
-learning_rate: 1e-2
-weight_decay: 0 
-spike_reg: 0 
-target_rate: [0.01, 0.4]
-seed_everything: 42
-max_epochs: 60
-gradient_clip_val: null
-log_every_n_epoch: 2
-accelerator: gpu
+random_seed: 42
 
-result_dir: ./sim_results
+logdir: ./results
 
 hydra:  
   job:

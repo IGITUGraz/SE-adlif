@@ -1,0 +1,10 @@
+_target_: datasets.shd.SHDLDM
+data_path: ${datadir}
+spatial_factor: 0.2
+time_factor: 0.001
+pad_to_min_size: 250
+window_size: 4
+batch_size: 256
+num_workers: 8
+num_classes: 20
+validate_on: 0.2
