@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.nn.parameter import Parameter
 
 from module.tau_trainers import TauTrainer, get_tau_trainer_class
+from omegaconf import DictConfig
 # TODO: remove this comment
 # what was removed:
 # any tracking hook for ploting
@@ -29,41 +30,37 @@ class LIF(Module):
 
     def __init__(
         self,
-        in_features: int,
-        out_features: int,
-        use_recurrent: bool = True,
-        thr: float = 1.0,
-        alpha: float = 5.0,
-        c: float = 0.4,
-        tau_u_range: tuple[float, float] = (20, 20),
-        train_tau_u_method: str = "fixed",
+        cfg: DictConfig,
         device=None,
         dtype=None,
         **kwargs,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__(**kwargs)
-        self.in_features = in_features
-        self.out_features = out_features
+        self.in_features = cfg.input_size
+        self.out_features = cfg.n_neurons
         self.dt = 1.0
-        self.tau_u_range = tau_u_range
-        self.use_recurrent = use_recurrent
-        self.thr = thr
-        self.alpha = alpha
-        self.c = c
+        self.tau_u_range = cfg.get('tau_u_range', [20, 20])
+        self.train_tau_u_method = cfg.get('train_tau_u_method', 'interpolation')
+        
+        self.use_recurrent = cfg.get('use_recurrent', True)
+        self.thr = cfg.get('thr', 1.0)
+        
+        self.alpha = cfg.get('alpha', 5.0)
+        self.c = cfg.get('c', 0.4)
 
         self.weight = Parameter(
-            torch.empty((out_features, in_features), **factory_kwargs)
+            torch.empty((self.out_features, self.in_features), **factory_kwargs)
         )
-        self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
+        self.bias = Parameter(torch.empty(self.out_features, **factory_kwargs))
         if self.use_recurrent:
             self.recurrent = Parameter(
-                    torch.empty((out_features, out_features), **factory_kwargs)
+                    torch.empty((self.out_features, self.out_features), **factory_kwargs)
                 )
         else:
             self.register_buffer("recurrent", None)
-        self.tau_u_trainer: TauTrainer = get_tau_trainer_class(train_tau_u_method)(
-            out_features,
+        self.tau_u_trainer: TauTrainer = get_tau_trainer_class(self.train_tau_u_method)(
+            self.out_features,
             self.dt,
             self.tau_u_range[0],
             self.tau_u_range[1],
@@ -95,32 +92,20 @@ class LIF(Module):
         z = torch.zeros(size=size, device=device, dtype=torch.float, requires_grad=True)
         return u, z
 
-    def forward(self, input_tensor: Tensor) -> tuple[Tensor, Tensor]:
-        
-        u0, z0 = self.initial_state(input_tensor.size(0), input_tensor.device)
-        u_tm1 = u0
-        z_tm1 = z0
-        outputs = []
+    def forward(self, input_tensor: Tensor, states: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+        u_tm1, z_tm1 = states
         decay_u = self.tau_u_trainer.get_decay()
-        for i in range(input_tensor.size(1)):
-            u_tm1 = u_tm1 * (1 - z_tm1.detach())
+        soma_current = F.linear(input_tensor, self.weight, self.bias)
+        if self.use_recurrent:
+            soma_rec_current = F.linear(z_tm1, self.recurrent, None)
+            soma_current += soma_rec_current
 
-            soma_current = F.linear(input_tensor[:, i], self.weight, self.bias)
-            if self.use_recurrent:
-                soma_rec_current = F.linear(z_tm1, self.recurrent, None)
-                soma_current += soma_rec_current
-
-            u_t = decay_u * u_tm1 + (1.0 - decay_u) * (soma_current)
-
-            u_thr = u_t - self.thr
-            # Forward Gradient Injection trick (credits to Sebastian Otte)
-            z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
-
-            outputs.append(z_t)
-            u_tm1 = u_t
-            z_tm1 = z_t
-        outputs = torch.stack(outputs, dim=1)
-        return outputs
+        u_t = decay_u * u_tm1 + (1.0 - decay_u) * (soma_current)
+        u_thr = u_t - self.thr
+        # Forward Gradient Injection trick (credits to Sebastian Otte)
+        z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
+        u_t = u_t * (1 - z_t.detach())
+        return z_t, (u_t, z_t)
 
 
     def apply_parameter_constraints(self):

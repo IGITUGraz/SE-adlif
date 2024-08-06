@@ -16,6 +16,7 @@ from module.tau_trainers import TauTrainer, get_tau_trainer_class
 # what was kept:
 # tau_mapping: nice encapsulation and 
 # we sometime train the tau of the last layer (auto-regression task)
+from omegaconf import DictConfig
 
 class LI(Module):
     __constants__ = ["in_features", "out_features"]
@@ -25,27 +26,25 @@ class LI(Module):
 
     def __init__(
         self,
-        in_features: int,
-        out_features: int,
-        tau_u_range: tuple = (20, 20),
-        train_tau_u_method: str = "fixed",
+        cfg: DictConfig,
         device=None,
         dtype=None,
         **kwargs,
     ) -> None:
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__(**kwargs)
-        self.in_features = in_features
-        self.out_features = out_features
+        self.in_features = cfg.n_neurons
+        self.out_features = cfg.dataset.num_classes
         self.dt = 1.0
-        self.tau_u_range = tau_u_range
+        self.tau_u_range = cfg.tau_out_range
+        self.train_tau_u_method = cfg.get('train_tau_out_method', 'fixed')
         self.weight = Parameter(
-            torch.empty((out_features, in_features), **factory_kwargs)
+            torch.empty((self.out_features, self.in_features), **factory_kwargs)
         )
 
-        self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
-        self.tau_u_trainer: TauTrainer = get_tau_trainer_class(train_tau_u_method)(
-            out_features,
+        self.bias = Parameter(torch.empty(self.out_features, **factory_kwargs))
+        self.tau_u_trainer: TauTrainer = get_tau_trainer_class(self.train_tau_u_method)(
+            self.out_features,
             self.dt,
             self.tau_u_range[0],
             self.tau_u_range[1],
@@ -76,21 +75,12 @@ class LI(Module):
         u = torch.zeros(size=size, device=device, dtype=torch.float, requires_grad=True)
         return u
 
-    def forward(self, input_tensor: Tensor) -> Tuple[Tensor, Tensor]:
-    
-        u0 = self.initial_state(
-            batch_size=input_tensor.size(0), device=input_tensor.device
-        )
-        u_tm1 = u0
-        outputs = []
+    def forward(self, input_tensor: Tensor, states: Tensor) -> Tuple[Tensor, Tensor]:
+        u_tm1 = states
         decay_u = self.tau_u_trainer.get_decay()
-        for i in range(input_tensor.size(1)):
-            current = F.linear(input_tensor[:, i], self.weight, self.bias)
-            u_t = decay_u * u_tm1 + (1.0 - decay_u) * current
-            outputs.append(u_t)
-            u_tm1 = u_t
-        outputs = torch.stack(outputs, dim=1)
-        return outputs
+        current = F.linear(input_tensor, self.weight, self.bias)
+        u_t = decay_u * u_tm1 + (1.0 - decay_u) * current
+        return u_t, u_t
 
     def apply_parameter_constraints(self):
         self.tau_u_trainer.apply_parameter_constraints()
