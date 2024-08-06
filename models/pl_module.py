@@ -21,14 +21,15 @@ class MLPSNN(pl.LightningModule):
     ) -> None:
         super().__init__()
         self.ignore_target_idx = -1
+        self.two_layers = cfg.two_layers
+        self.output_size = cfg.dataset.num_classes
+        self.init_metrics_and_loss(cfg)
+
         self.cell = layer_map[cfg.cell]
         self.l1 = self.cell(cfg)
-        self.two_layers = cfg.two_layers
         if cfg.two_layers:
             self.l2 = self.cell(cfg)
         self.out_layer = LI(cfg)
-        self.output_size = cfg.dataset.num_classes
-        self.init_metrics_and_loss(cfg)
 
     def forward(
         self, inputs: tuple[torch.Tensor, ...]
