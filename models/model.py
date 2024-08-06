@@ -1,43 +1,61 @@
 from typing import Any
 import torch
 from torch.nn import Module
-from module.base_cell import BaseSNN
-from module.lif import LIFLayer
-from module.alif import ALIFLayer
-from module.li import LILayer
-
-class_map: dict[str, BaseSNN] = {
-    "LILayer": LILayer,
-    "LIFLayer": LIFLayer,
-    "ALIFLayer": ALIFLayer,
-
-}
+from models.alif import SEAdLIF, EFAdLIF
+from models.li import LI
+from models.lif import LIF
+from torch.nn import Dropout
 
 
 def resolve_model_config(model_config: dict[str, dict]):
     """
     Iterate over layers in the model_config dictonary
-
-    Args:
-        model_config (dict[str, dict]): ordered dictonary where the value of each key
-        is a dictonary representing the layer class name plus the parameters for this class.
-        ex: {
-            "layer_1":{"class": "ALIFLayer", "in_features": 10,"out_features": 128, "thr": 0.5}, 
-            "layer_2": {"class": "LILayer", "in_features": 128, "out_features": 10
-            }
-        The layers names are only here to prevent clash of names in the config files
         
     Returns:
         list[Module]: list of instanciated layers
     """
     layers = []
-    for i, (k, v) in enumerate(model_config.items()):
-        module_class = v["class"]
-        # remove the class name from the dictonary of the module parameters
-        # as is not part of the parameters and only here to determined the Layer's class
-        del v["class"]
-        layer_obj = class_map[module_class](**v)
-        layers.append(layer_obj)
+    if model_config['model'] in ['SE-adLIF', 'EF-adLIF']:
+        main_layer = SEAdLIF if model_config['model'] == 'SE-adLIF' else EFAdLIF
+        in_features = model_config['in_features']
+        for i in range(model_config['n_layers']):
+            layers.append(main_layer(
+                in_features=in_features,
+                out_features=model_config['n_neurons'],
+                alpha=model_config['alpha'],
+                c=model_config['c'],
+                tau_u_range=model_config['tau_u_range'],
+                train_tau_u_method='interpolation',
+                tau_w_range=model_config['tau_w_range'],
+                train_tau_w_method='interpolation',
+                use_recurrent=model_config.get('use_recurrent', True),
+                a_range=[0.0, 1.0],
+                b_range=[0.0, 2.0],
+                q=model_config['q']))
+            in_features = model_config['n_neurons']
+    #TODO: ADD LSTM wrapper
+    else:
+        main_layer = LIF
+        in_features = model_config['in_features']
+        for i in range(model_config['n_layers']):
+            layers.append(main_layer(
+                in_features=in_features,
+                out_features=model_config['n_neurons'],
+                alpha=model_config['alpha'],
+                c=model_config['c'],
+                tau_u_range=model_config['tau_u_range'],
+                train_tau_u_method='interpolation',
+                use_recurrent=model_config.get('use_recurrent', True),))
+            in_features = model_config['n_neurons']
+    layers.append(
+        LI(
+            in_features=model_config['n_neurons'],
+            out_features=model_config['out_features'],
+            tau_u_range=model_config['tau_out_range'],
+            train_tau_u_method=model_config.get('train_tau_out_method', "fixed")
+        )
+    )
+    
     return layers
 
 

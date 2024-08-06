@@ -98,13 +98,11 @@ class LIF(Module):
     def forward(self, input_tensor: Tensor) -> tuple[Tensor, Tensor]:
         
         u0, z0 = self.initial_state(input_tensor.size(0), input_tensor.device)
-        u = [u0,]
-        z = [z0,]
+        u_tm1 = u0
+        z_tm1 = z0
         outputs = []
         decay_u = self.tau_u_trainer.get_decay()
         for i in range(input_tensor.size(1)):
-            u_tm1 = u[-1]
-            z_tm1 = z[-1]
             u_tm1 = u_tm1 * (1 - z_tm1.detach())
 
             soma_current = F.linear(input_tensor[:, i], self.weight, self.bias)
@@ -119,14 +117,10 @@ class LIF(Module):
             z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
 
             outputs.append(z_t)
-            u.append(u_t)
-            z.append(z_t)
-        
-        u = torch.stack(u, dim=1)
-        z = torch.stack(z, dim=1)
-        states = torch.stack([u, z], dim=0)
+            u_tm1 = u_t
+            z_tm1 = z_t
         outputs = torch.stack(outputs, dim=1)
-        return outputs, states
+        return outputs
 
 
     def apply_parameter_constraints(self):

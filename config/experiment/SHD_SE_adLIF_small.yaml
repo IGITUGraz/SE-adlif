@@ -29,8 +29,8 @@ tau_w_range: [60, 300]
 # Dropout rate
 dropout: 0.15
 
-# Time constant of output layer
-tau_out: 15
+# Time constant of output layer 
+tau_out_range: [15, 15]
 
 # Batch size
 batch_size: 256
