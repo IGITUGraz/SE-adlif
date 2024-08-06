@@ -141,17 +141,14 @@ class EFAdLIF(Module):
         decay_u = self.tau_u_trainer.get_decay()
         decay_w = self.tau_w_trainer.get_decay()
         u0, z0, w0 = self.initial_state(input_tensor.size(0), input_tensor.device)
-        u = [u0,]
-        z = [z0,]
-        w = [w0,]
+        u_tm1 = u0
+        z_tm1 = z0
+        w_tm1 = w0
         outputs = []
         a = self.a
         b = self.b
 
         for i in range(input_tensor.size(1)):
-            u_tm1 = u[-1]
-            z_tm1 = z[-1]
-            w_tm1 = w[-1]
             u_tm1 = u_tm1 * (1 - z_tm1.detach())
             soma_current = F.linear(input_tensor[:, i], self.weight, self.bias)
             if self.use_recurrent:
@@ -172,15 +169,11 @@ class EFAdLIF(Module):
             )
             
             outputs.append(z_t)
-            u.append(u_t)
-            z.append(z_t)
-            w.append(w_t)
-        u = torch.stack(u, dim=1)
-        z = torch.stack(z, dim=1)
-        w = torch.stack(w, dim=1)
-        states = torch.stack([u, z, w], dim=0)
+            u_tm1 = u_t
+            z_tm1 = z_t
+            w_tm1 = w_t
         outputs = torch.stack(outputs, dim=1)
-        return outputs, states
+        return outputs
 class SEAdLIF(EFAdLIF):
     def forward(
         self, input_tensor: Tensor
@@ -188,17 +181,14 @@ class SEAdLIF(EFAdLIF):
         decay_u = self.tau_u_trainer.get_decay()
         decay_w = self.tau_w_trainer.get_decay()
         u0, z0, w0 = self.initial_state(input_tensor.size(0), input_tensor.device)
-        u = [u0,]
-        z = [z0,]
-        w = [w0,]
+        u_tm1 = u0
+        z_tm1 = z0
+        w_tm1 = w0
         outputs = []
         a = self.a
         b = self.b
 
         for i in range(input_tensor.size(1)):
-            u_tm1 = u[-1]
-            z_tm1 = z[-1]
-            w_tm1 = w[-1]
             soma_current = F.linear(input_tensor[:, i], self.weight, self.bias)
             if self.use_recurrent:
                 soma_rec_current = F.linear(z_tm1, self.recurrent, None)
@@ -211,20 +201,16 @@ class SEAdLIF(EFAdLIF):
             # Forward Gradient Injection trick (credits to Sebastian Otte)
             z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
             # Symplectic formulation with early reset
-            u_t = u_t * (1 - z_t.detach())
+            u_t = u_t * (1.0 - z_t.detach())
             w_t = (
                 decay_w * w_tm1
                 + (1.0 - decay_w) * (a * u_t + b * z_t) * self.q
             )
             
             outputs.append(z_t)
-            u.append(u_t)
-            z.append(z_t)
-            w.append(w_t)
-        u = torch.stack(u, dim=1)
-        z = torch.stack(z, dim=1)
-        w = torch.stack(w, dim=1)
-        states = torch.stack([u, z, w], dim=0)
+            u_tm1 = u_t
+            z_tm1 = z_t
+            w_tm1 = w_t
         outputs = torch.stack(outputs, dim=1)
-        return outputs, states
+        return outputs
     

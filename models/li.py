@@ -81,18 +81,16 @@ class LI(Module):
         u0 = self.initial_state(
             batch_size=input_tensor.size(0), device=input_tensor.device
         )
-        u = [u0,]
+        u_tm1 = u0
         outputs = []
         decay_u = self.tau_u_trainer.get_decay()
         for i in range(input_tensor.size(1)):
-            u_tm1 = u[-1]
             current = F.linear(input_tensor[:, i], self.weight, self.bias)
             u_t = decay_u * u_tm1 + (1.0 - decay_u) * current
             outputs.append(u_t)
-            u.append(u_t)
-        states = torch.stack(u, dim=1).unsqueeze(0)
+            u_tm1 = u_t
         outputs = torch.stack(outputs, dim=1)
-        return outputs, states
+        return outputs
 
     def apply_parameter_constraints(self):
         self.tau_u_trainer.apply_parameter_constraints()

@@ -8,13 +8,9 @@ experiment: Test
 monitored_metric: "val_acc_epoch"
 # improvement is made by maximization or minimization of the monitored metric
 monitor_mode: "max"
-learning_rate: 1e-2
-weight_decay: 0 
-spike_reg: 0 
-target_rate: [0.01, 0.4]
 seed_everything: 42
 max_epochs: 60
-gradient_clip_val: null
+gradient_clip_val: 1.5
 log_every_n_epoch: 2
 accelerator: gpu
 
