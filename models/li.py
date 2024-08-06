@@ -3,10 +3,10 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Module, Tensor
+from torch.nn import Module
+from torch import Tensor
 from torch.nn.parameter import Parameter
 
-from module.base_cell import BaseSNN
 from module.tau_trainers import TauTrainer, get_tau_trainer_class
 # TODO: remove this comment
 # what was removed:
@@ -17,7 +17,7 @@ from module.tau_trainers import TauTrainer, get_tau_trainer_class
 # tau_mapping: nice encapsulation and 
 # we sometime train the tau of the last layer (auto-regression task)
 
-class LILayer(Module):
+class LI(Module):
     __constants__ = ["in_features", "out_features"]
     in_features: int
     out_features: int
@@ -27,9 +27,8 @@ class LILayer(Module):
         self,
         in_features: int,
         out_features: int,
-        dt: float = 1.0,
-        tau: tuple = (20, 20),
-        train_tau_method: str = "fixed",
+        tau_u_range: tuple = (20, 20),
+        train_tau_u_method: str = "fixed",
         device=None,
         dtype=None,
         **kwargs,
@@ -38,25 +37,25 @@ class LILayer(Module):
         super().__init__(**kwargs)
         self.in_features = in_features
         self.out_features = out_features
-        self.dt = dt
-        self.tau_range = tau
+        self.dt = 1.0
+        self.tau_u_range = tau_u_range
         self.weight = Parameter(
             torch.empty((out_features, in_features), **factory_kwargs)
         )
 
         self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
-        self.tau_trainer: TauTrainer = get_tau_trainer_class(train_tau_method)(
+        self.tau_u_trainer: TauTrainer = get_tau_trainer_class(train_tau_u_method)(
             out_features,
             self.dt,
-            self.tau_range[0],
-            self.tau_range[1],
+            self.tau_u_range[0],
+            self.tau_u_range[1],
             **factory_kwargs,
         )
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.tau_trainer.reset_parameters()
+        self.tau_u_trainer.reset_parameters()
         nn.init.uniform_(
             self.weight,
             -1 * torch.sqrt(1 / torch.tensor(self.in_features)),
@@ -72,35 +71,28 @@ class LILayer(Module):
 
     def initial_state(
         self, batch_size: int, device: Optional[torch.device] = None
-    ) -> torch.Tensor:
+    ) -> Tensor:
         size = (batch_size, self.out_features)
-        v = torch.zeros(size=size, device=device, dtype=torch.float, requires_grad=True)
-        return v
+        u = torch.zeros(size=size, device=device, dtype=torch.float, requires_grad=True)
+        return u
 
-    def forward(self, input_tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # pre-allocate memory for the states and outputs where states is
-        # (num_states, batch_size, time, num_neurons)
-        # and outputs is (batch_size, time, num_neurons)
-
-        states = torch.empty(
-            (1, input_tensor.size(0), input_tensor.size(1) + 1, self.out_features),
-            device=input_tensor.device,
-        )
-        v0 = self.initial_state(
+    def forward(self, input_tensor: Tensor) -> Tuple[Tensor, Tensor]:
+    
+        u0 = self.initial_state(
             batch_size=input_tensor.size(0), device=input_tensor.device
         )
-        v = [v0,]
+        u = [u0,]
         outputs = []
-        decay = self.tau_trainer.get_decay()
+        decay_u = self.tau_u_trainer.get_decay()
         for i in range(input_tensor.size(1)):
-            v_tm1 = v[-1]
+            u_tm1 = u[-1]
             current = F.linear(input_tensor[:, i], self.weight, self.bias)
-            v_t = decay * v_tm1 + (1 - decay) * current
-            outputs.append(v_t)
-            v.append(v_t)
-        states = torch.stack(v, dim=1).unsqueeze(0)
+            u_t = decay_u * u_tm1 + (1.0 - decay_u) * current
+            outputs.append(u_t)
+            u.append(u_t)
+        states = torch.stack(u, dim=1).unsqueeze(0)
         outputs = torch.stack(outputs, dim=1)
         return outputs, states
 
     def apply_parameter_constraints(self):
-        self.tau_trainer.apply_parameter_constraints()
+        self.tau_u_trainer.apply_parameter_constraints()
