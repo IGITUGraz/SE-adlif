@@ -1,5 +1,6 @@
-dataset: SHD
-model: SE-adLIF
+overrides:
+  - /dataset: shd
+  - /model: alif
 
 # learning rate of the optimizer
 lr: 0.01

@@ -1,23 +1,14 @@
 import pytorch_lightning as pl
 import hydra
 from omegaconf import DictConfig, OmegaConf
-#from datasets.number_recognition import NumberRecognitionDM
-from datasets.multidigit_addition import MultiDigitAdditionDM
-from datasets.temporal_gaussian_array import TemporalGaussianArrayDM
-from datasets.temporal_gaussian_array_poisson import TemporalGaussianArrayPoissonDM
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
-from model.pl_module import MLPSNN
+from models.pl_module import MLPSNN
 import sys
 import traceback
 import matplotlib
 import copy
-matplotlib.use("agg")
-dataset_map = {
-    "multidigit_addition": MultiDigitAdditionDM,
-    "temporal_gaussian_array": TemporalGaussianArrayDM,
-    "temporal_gaussian_array_poisson": TemporalGaussianArrayPoissonDM,
-}
+
 @hydra.main(config_path="config", config_name="main", version_base=None)
 def main(cfg: DictConfig):
     try:

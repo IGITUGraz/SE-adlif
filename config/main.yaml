@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - data: ???
+  - dataset: ???
   - experiment: SHD_SE_adLIF_small
 
 random_seed: 42

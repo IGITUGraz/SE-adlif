@@ -10,7 +10,7 @@ from functional.loss import (
     get_per_layer_spike_probs,
     snn_regularization,
 )
-from model.model import CustomSeq, resolve_model_config
+from models.model import CustomSeq, resolve_model_config
 
 
 class MLPSNN(pl.LightningModule):
