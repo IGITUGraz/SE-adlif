@@ -1,0 +1,47 @@
+random_seed: 42
+logdir: ./results
+dataset:
+  _target_: datasets.pl_dataset.SHDLDM
+  name: SHD Classification
+  required_model_size: small
+  data_path: ${cluster_path}
+  cache_root: ${cache_root}
+  spatial_factor: 0.2
+  time_factor: 0.001
+  input_encoding: time_window
+  n_time_bins: 100
+  pad_to_min_size: 250
+  window_size: 4
+  count_thr: 1
+  duration_ratio: 1.0
+  batch_size: 256
+  num_workers: 8
+  fits_into_ram: false
+  get_metadata: false
+  num_classes: 20
+  binarize_frames: false
+  validate_on: test
+  additional_test_set_validation: false
+experiment:
+  overrides:
+  - /dataset: shd
+  cell: se_adlif
+  lr: 0.01
+  n_neurons: 128
+  two_layers: false
+  q: 120
+  alpha: 5
+  c: 0.4
+  n_epochs: 300
+  tau_u_range:
+  - 5
+  - 25
+  tau_w_range:
+  - 60
+  - 300
+  dropout: 0.15
+  tau_out_range:
+  - 15
+  - 15
+  batch_size: 256
+  loss_agg: softmax

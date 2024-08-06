@@ -1,40 +1,10 @@
-# class_path: datasets.pl_dataset.SHDLDM
-# init_args:
-_target_: datasets.pl_dataset.SHDLDM
-name: SHD Classification
-required_model_size: small
-data_path: ${cluster_path}
-cache_root: ${cache_root}
+_target_: datasets.shd.SHDLDM
+data_path: ${datadir}
 spatial_factor: 0.2
 time_factor: 0.001
-input_encoding: time_window
-n_time_bins: 100
 pad_to_min_size: 250
 window_size: 4
-count_thr: 1
-# spatial_pooling_factor: 5
-duration_ratio: 1.0
-# split_percent: 1.0
 batch_size: 256
 num_workers: 8
-fits_into_ram: false
-get_metadata: false
 num_classes: 20
-binarize_frames: false
 validate_on: test
-additional_test_set_validation: false
-
-# class_path: datasets.pl_dataset.SHDLDM
-# init_args:
-#   # data_path: "/calc/baronig/data_sets/SHD"
-#   spatial_factor: 1.0
-#   time_factor: 0.001
-#   input_encoding: time_bin #time_window
-#   n_time_bins: 100
-#   window_size: 10.0
-#   count_thr: 1
-#   duration_ratio: 1.0
-#   split_percent: 0.8
-#   batch_size: 64
-#   num_workers: 0 # 4
-# # with this setup the mean input frequency is around 34 Hz

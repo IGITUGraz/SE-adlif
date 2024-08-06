@@ -1,99 +1,58 @@
 import pytorch_lightning as pl
 import torch
 import torchmetrics
-from pytorch_lightning.utilities import grad_norm
 from torch.nn import CrossEntropyLoss
-from torch.optim.optimizer import Optimizer
+from models.alif import EFAdLIF, SEAdLIF
+from models.li import LI
+from models.lif import LIF
 
-from functional.loss import (
-    calculate_weight_decay_loss,
-    get_per_layer_spike_probs,
-    snn_regularization,
-)
-from models.model import CustomSeq, resolve_model_config
+
+layer_map = {
+    "lif": LIF,
+    "se_adlif": SEAdLIF,
+    "ef_adlif": EFAdLIF,
+}
 
 
 class MLPSNN(pl.LightningModule):
     def __init__(
         self,
-        model_config: dict,
-        batch_size: int = 64,
-        learning_rate: float = 1e-2,
-        target_rate: list[int] = [0.01, 0.4],
-        weight_decay: float = 0.01,
-        monitored_metric: str = "val_acc_epoch",
-        lr_mode: str = "max",
-        output_func: str = "softmax",
+        cfg,
     ) -> None:
         super().__init__()
-        self.learning_rate = learning_rate
-        self.monitored_metric = monitored_metric
-        self.lr_mode = lr_mode
-        self.target_rate = target_rate
-        self.batch_size = batch_size
-        self.processed_batch = 0
-        self.weight_decay = weight_decay
         self.ignore_target_idx = -1
-        self.output_func = output_func
-        
-
-        layers = resolve_model_config(model_config=model_config)
-        self.model = CustomSeq(
-            *layers,
-        )
-        self.output_size = self.model.output_size
-        # optimizer config
-
-        metrics = torchmetrics.MetricCollection(
-            {
-                "acc": torchmetrics.Accuracy(
-                    task="multiclass",  # type: ignore
-                    num_classes=self.output_size,
-                    average="micro",
-                    ignore_index=self.ignore_target_idx,
-                )
-            }
-        )
-        self.train_metric = metrics.clone(prefix="train_")
-        self.val_metric = metrics.clone(prefix="val_")
-        self.test_metric = metrics.clone(prefix="test_")
-        self.loss = CrossEntropyLoss(ignore_index=self.ignore_target_idx)
-
-        self.save_hyperparameters()
-
-    # cf. https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.core.LightningModule.html#lightning.pytorch.core.LightningModule.configure_optimizers
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(params=self.parameters(), lr=self.learning_rate)
-
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer=optimizer,
-            mode=self.lr_mode,
-            factor=0.9,
-            patience=3,
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": lr_scheduler,
-                "monitor": self.monitored_metric,
-            },
-        }
+        self.cell = layer_map[cfg.cell]
+        self.l1 = self.cell(cfg)
+        self.two_layers = cfg.two_layers
+        if cfg.two_layers:
+            self.l2 = self.cell(cfg)
+        self.out_layer = LI(cfg)
+        self.output_size = cfg.dataset.num_classes
+        self.init_metrics_and_loss(cfg)
 
     def forward(
         self, inputs: tuple[torch.Tensor, ...]
     ) -> tuple[torch.Tensor, list[torch.Tensor]]:
-        return self.model(inputs)
-
-    def on_before_optimizer_step(self, optimizer: Optimizer) -> None:
-        # log weights gradient norm
-        self.log_dict(grad_norm(self, norm_type=2))
+        s1 = self.l1.get_initial_state(inputs[0].shape[0], inputs[0].device)
+        s_out = self.out_layer.get_initial_state(inputs[0].shape[0], inputs[0].device)
+        if self.two_layers:
+            s2 = self.l2.get_initial_state(inputs[0].shape[0], inputs[0].device)
+        out_sequence = []
+        for t, x_t in enumerate(inputs):
+            out, s1 = self.l1(x_t, s1)
+            if self.two_layers:
+                out, s2 = self.l2(out, s2)
+            out, s_out = self.out_layer(out, s_out)
+            out_sequence.append(out)
+        return out_sequence
 
     def on_train_batch_end(self, outputs, batch, batch_idx: int):
-        self.model.apply_parameter_constraints()
+        self.l1.apply_parameter_constraints()
+        if self.two_layers:
+            self.l2.apply_parameter_constraints()
+        self.out_layer.apply_parameter_constraints()
 
-    def process_predictions_and_compute_losses(
-        self, outputs, targets, block_idx
-    ):
+    def process_predictions_and_compute_losses(self, outputs, targets, block_idx):
         """
         Process the model output into prediction
         with respect to the temporal segmentation defined by the
@@ -121,7 +80,7 @@ class MLPSNN(pl.LightningModule):
             device=outputs.device,
         )
         block_idx = block_idx.unsqueeze(-1)
-        
+
         block_output = torch.scatter_reduce(
             block_outputs,
             dim=1,
@@ -180,55 +139,37 @@ class MLPSNN(pl.LightningModule):
             on_step=True,
             batch_size=self.batch_size,
         )
-        for k, v in aux_losses.items():
-            self.log(
-                f"{prefix}{k}",
-                v,
-                prog_bar=True,
-                on_epoch=True,
-                on_step=True,
-                batch_size=self.batch_size,
-            )
 
     def training_step(self, batch, batch_idx):
         inputs, targets, block_idx = batch
-        outputs = self(inputs,)
+        outputs = self(
+            inputs,
+        )
         (
             outputs_reduce,
             loss,
             block_idx,
-        ) = self.process_predictions_and_compute_losses(
-            outputs, targets, block_idx
-        )
+        ) = self.process_predictions_and_compute_losses(outputs, targets, block_idx)
 
-        weight_decay_loss = self.weight_decay * calculate_weight_decay_loss(self.model)
-
-        aux_metrics = {
-            "weight_decay_loss": weight_decay_loss,
-        }
         targets_reduce = targets.flatten()
         self.update_and_log_metrics(
             outputs_reduce,
             targets_reduce,
             loss,
             self.train_metric,
-            aux_metrics,
             prefix="train_",
         )
 
-        return loss + weight_decay_loss
+        return loss
 
     def validation_step(self, batch, batch_idx):
         inputs, targets, block_idx = batch
         outputs = self(inputs)
-
         (
             outputs_reduce,
             loss,
             block_idx,
-        ) = self.process_predictions_and_compute_losses(
-            outputs, targets, block_idx
-        )
+        ) = self.process_predictions_and_compute_losses(outputs, targets, block_idx)
         targets_reduce = targets.flatten()
 
         self.update_and_log_metrics(
@@ -239,9 +180,7 @@ class MLPSNN(pl.LightningModule):
             {},
             prefix="val_",
         )
-        # report statistics (weights and spiking distribution) and plot an example of
-        # model behavior against a random input
-       
+
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -252,9 +191,7 @@ class MLPSNN(pl.LightningModule):
             outputs_reduce,
             loss,
             block_idx,
-        ) = self.process_predictions_and_compute_losses(
-            outputs, targets, block_idx
-        )
+        ) = self.process_predictions_and_compute_losses(outputs, targets, block_idx)
 
         targets_reduce = targets.flatten()
         self.update_and_log_metrics(
@@ -267,3 +204,20 @@ class MLPSNN(pl.LightningModule):
         )
 
         return loss
+
+    def init_metrics_and_loss(self, cfg):
+        metrics = torchmetrics.MetricCollection(
+            {
+                "acc": torchmetrics.Accuracy(
+                    task="multiclass",  # type: ignore
+                    num_classes=self.output_size,
+                    average="micro",
+                    ignore_index=self.ignore_target_idx,
+                )
+            }
+        )
+        self.train_metric = metrics.clone(prefix="train_")
+        self.val_metric = metrics.clone(prefix="val_")
+        self.test_metric = metrics.clone(prefix="test_")
+
+        self.loss = CrossEntropyLoss(ignore_index=self.ignore_target_idx)

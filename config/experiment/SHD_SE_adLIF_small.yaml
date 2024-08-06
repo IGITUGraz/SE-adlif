@@ -1,6 +1,8 @@
 overrides:
   - /dataset: shd
-  - /model: alif
+
+# Which cell to use
+cell: se_adlif
 
 # learning rate of the optimizer
 lr: 0.01
@@ -8,8 +10,8 @@ lr: 0.01
 # number of neurons
 n_neurons: 128
 
-# number of layers
-n_layers: 2
+# Whether to use a two-layer network
+two_layers: false
 
 # Factor for reparametrization of a and b (see paper)
 q: 120
@@ -35,3 +37,6 @@ tau_out_range: [15, 15]
 
 # Batch size
 batch_size: 256
+
+# Loss aggregation
+loss_agg: softmax

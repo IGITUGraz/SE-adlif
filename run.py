@@ -1,89 +1,43 @@
 import pytorch_lightning as pl
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from models.pl_module import MLPSNN
-import sys
-import traceback
-import matplotlib
-import copy
+
+# Main entry point. We use Hydra (https://hydra.cc) for configuration management. Note, that Hydra changes the working directory, such that each run gets a unique directory.
 
 @hydra.main(config_path="config", config_name="main", version_base=None)
 def main(cfg: DictConfig):
-    try:
-        # DictConfig to standard python dict
-        cfg = OmegaConf.to_container(cfg, resolve=True)
-        pl.seed_everything(cfg["seed_everything"], workers=True)
+    pl.seed_everything(cfg.random_seed, workers=True)
 
-        datamodule = hydra.utils.instantiate(cfg["dataset"])
+    datamodule = hydra.utils.instantiate(cfg["dataset"])
+    model = MLPSNN(cfg)
+    callbacks = []
+    model_ckpt_tracker: ModelCheckpoint = ModelCheckpoint(
+        monitor="val_acc_epoch",
+        mode="max",
+        save_last=False,
+        save_top_k=1,
+        dirpath="ckpt"
+    )
+    lr_monitor = LearningRateMonitor(
+        logging_interval='step'
+    )
+    callbacks = [model_ckpt_tracker, lr_monitor]
 
-        model = MLPSNN(
-            **cfg["model"],
-            batch_size=cfg["data"]["batch_size"],
-            monitored_metric=cfg["monitored_metric"],
-            lr_mode=cfg["monitor_mode"],
-            log_every_n_epoch=cfg["log_every_n_epoch"],
-            learning_rate=cfg["learning_rate"],
-            weight_decay=cfg["weight_decay"],
-            spike_reg=cfg["spike_reg"],
-            target_rate=cfg["target_rate"]
-            )
-        callbacks = []
-        model_ckpt_tracker: ModelCheckpoint = ModelCheckpoint(
-            monitor=cfg["monitored_metric"],
-            mode=cfg["monitor_mode"],
-            save_last=False,
-            save_top_k=1,
-            dirpath="ckpt"
-        )
-        lr_monitor = LearningRateMonitor(
-            logging_interval='step'
-        )
-        callbacks = [model_ckpt_tracker, lr_monitor]
-        try: 
-            from aim.pytorch_lightning import AimLogger
-            
-            # remove stdout 
-            enable_progress_bar = True
-            logger = AimLogger(
-                repo= "/home/sabathiels/code/adlif/adlif-main/sim_results" + "/.aim", #cfg["result_dir"]+ "/.aim",
-                experiment=cfg["experiment"],
-            )
-            logger = logger
-        except ImportError:
-            print("[W] Aim is not installed, fallback to stdout", flush=True)
-            logger = True
-            enable_progress_bar = True
-        trainer: pl.Trainer = pl.Trainer(
-            logger=logger,
-            callbacks=callbacks,
-            max_epochs=cfg["max_epochs"],
-            gradient_clip_val=cfg["gradient_clip_val"],
-            enable_progress_bar=enable_progress_bar,
-            log_every_n_steps=cfg["log_every_n_epoch"],
-            accelerator=cfg["accelerator"]
-            )
-        # add hyper-parameters not automatically tracked
-        trainer.logger.log_hyperparams(cfg["data"])
-        trainer.logger.log_hyperparams(
-            {
-                "seed": cfg["seed_everything"],
-                "gradient_clip_val": cfg["gradient_clip_val"],
-                
-            }
+    trainer: pl.Trainer = pl.Trainer(
+        callbacks=callbacks,
+        max_epochs=cfg.n_epochs,
+        gradient_clip_val=1.5,
+        enable_progress_bar=True,
+        accelerator="auto"
         )
 
-        trainer.fit(model, datamodule=data)
-        trainer.test(model, ckpt_path="best", datamodule=data)
-        trainer.logger.log_hyperparams(
-            {"ckpt_path": trainer.checkpoint_callback.best_model_path}
-        )
-        trainer.logger.save()
-        return trainer.checkpoint_callback.best_model_score.cpu().detach().numpy()
-    except Exception:
-        traceback.print_exc(file=sys.stderr)
-        raise
+    trainer.fit(model, datamodule=datamodule)
+    trainer.test(model, ckpt_path="best", datamodule=datamodule)
+
+    return trainer.checkpoint_callback.best_model_score.cpu().detach().numpy()
 
 
 if __name__ == "__main__":
