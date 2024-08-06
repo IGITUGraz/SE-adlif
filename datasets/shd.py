@@ -68,7 +68,7 @@ class SHDLDM(pl.LightningDataModule):
         self.split_percent = split_percent
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.collate_fn = PadTensors(sparse_data=False, contextual=False)
+        self.collate_fn = PadTensors()
         self.validate_on = validate_on
         self.additional_test_set_validation = additional_test_set_validation
         self.random_seed = random_seed

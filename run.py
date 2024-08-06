@@ -11,7 +11,7 @@ from models.pl_module import MLPSNN
 def main(cfg: DictConfig):
     pl.seed_everything(cfg.random_seed, workers=True)
 
-    datamodule = hydra.utils.instantiate(cfg["dataset"])
+    datamodule = hydra.utils.instantiate(cfg.dataset)
     model = MLPSNN(cfg)
     callbacks = []
     model_ckpt_tracker: ModelCheckpoint = ModelCheckpoint(
