@@ -1,24 +1,27 @@
 from typing import Optional, Tuple
 
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Module, Tensor
 from torch.nn.parameter import Parameter
 
 from module.base_cell import BaseSNN
 from module.tau_trainers import TauTrainer, get_tau_trainer_class
-from utils.utils import get_event_indices, save_distributions_to_aim, save_fig_to_aim
+# TODO: remove this comment
+# what was removed:
+# any tracking hook for plotting
+# initialization method: as we use the same things every time
+# use bias: as we always use bias
+# what was kept:
+# tau_mapping: nice encapsulation and 
+# we sometime train the tau of the last layer (auto-regression task)
 
-
-class LILayer(BaseSNN):
+class LILayer(Module):
     __constants__ = ["in_features", "out_features"]
     in_features: int
     out_features: int
     weight: Tensor
-    param_decay: Tensor
 
     def __init__(
         self,
@@ -26,9 +29,7 @@ class LILayer(BaseSNN):
         out_features: int,
         dt: float = 1.0,
         tau: tuple = (20, 20),
-        use_bias: bool = True,
         train_tau_method: str = "fixed",
-        initialization_method: str = "normal",
         device=None,
         dtype=None,
         **kwargs,
@@ -39,15 +40,11 @@ class LILayer(BaseSNN):
         self.out_features = out_features
         self.dt = dt
         self.tau_range = tau
-        self.use_bias = use_bias
-        self.initialization_method = initialization_method
         self.weight = Parameter(
             torch.empty((out_features, in_features), **factory_kwargs)
         )
-        if self.use_bias:
-            self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
-        else:
-            self.register_buffer("bias", None)
+
+        self.bias = Parameter(torch.empty(out_features, **factory_kwargs))
         self.tau_trainer: TauTrainer = get_tau_trainer_class(train_tau_method)(
             out_features,
             self.dt,
@@ -60,27 +57,12 @@ class LILayer(BaseSNN):
 
     def reset_parameters(self):
         self.tau_trainer.reset_parameters()
-        if self.initialization_method == "uniform":
-            nn.init.uniform_(
-                self.weight,
-                -1 * torch.sqrt(1 / torch.tensor(self.in_features)),
-                torch.sqrt(1 / torch.tensor(self.in_features)),
-            )
-        elif self.initialization_method == "normal":
-            nn.init.normal_(
-                self.weight, 0.0, torch.sqrt(1 / torch.tensor(self.in_features))
-            )
-        elif self.initialization_method == "orthogonal":
-            nn.init.orthogonal_(self.weight)
-        elif self.initialization_method == "xavier_normal":
-            nn.init.xavier_normal_(self.weight)
-        else:
-            raise ValueError(
-                f"Unknown initialization method {self.initialization_method}"
-            )
-
-        if self.bias is not None:
-            torch.nn.init.zeros_(self.bias)
+        nn.init.uniform_(
+            self.weight,
+            -1 * torch.sqrt(1 / torch.tensor(self.in_features)),
+            torch.sqrt(1 / torch.tensor(self.in_features)),
+        )
+        torch.nn.init.zeros_(self.bias)
 
     @torch.jit.ignore
     def extra_repr(self) -> str:
@@ -122,78 +104,3 @@ class LILayer(BaseSNN):
 
     def apply_parameter_constraints(self):
         self.tau_trainer.apply_parameter_constraints()
-
-    @staticmethod
-    def plot_states(layer_idx, inputs, states, targets, block_idx, output_size):
-        # the li layer is always assumed to be the output layer of a classification
-        # problem the argmax of the state is thus compared this respect to the target
-        # if the problem would be a regression this code should be changed
-
-        figure, axes = plt.subplots(nrows=3, ncols=1, sharex="all", figsize=(8, 11))
-        inputs = inputs.cpu().detach().numpy()
-        # remove the first states as it's the initialization states
-        states = states[:, 1:].cpu().detach().numpy()
-        targets = targets.cpu().detach().numpy()
-        block_idx = block_idx.cpu().detach().numpy()
-        targets_in_time = targets[block_idx]
-
-        axes[0].eventplot(
-            get_event_indices(inputs.T), color="black", orientation="horizontal"
-        )
-        axes[0].set_ylabel("Input")
-        axes[1].plot(states[0])
-        axes[1].set_ylabel("v_t/output")
-        pred = np.argmax(states[0], -1)
-        axes[2].plot(pred, color="blue", label="Prediction")
-        axes[2].plot(targets_in_time, color="red", label="Target")
-        axes[2].legend()
-        axes[2].set_ylabel("Class")
-        figure.suptitle(f"Layer {layer_idx}\n")
-        plt.tight_layout()
-        plt.close(figure)
-        return figure
-
-    def layer_stats(
-        self,
-        layer_idx: int,
-        logger,
-        epoch_step: int,
-        inputs: torch.Tensor,
-        states: torch.Tensor,
-        targets: torch.Tensor,
-        block_idx: torch.Tensor,
-        output_size: int,
-        **kwargs,
-    ):
-        """Generate statistisc from the layer weights and a plot of the layer dynamics for a random task example
-        Args:
-            layer_idx (int): index for the layer in the hierarchy
-            logger (_type_): aim logger reference
-            epoch_step (int): epoch
-            spike_probability (torch.Tensor): spike probability for each neurons
-            inputs (torch.Tensor): random example
-            states (torch.Tensor): states associated to the computation of the random example
-            targets (torch.Tensor): target associated to the random example
-            block_idx (torch.Tensor): block indices associated to the random example
-        """
-        save_fig_to_aim(
-            logger=logger,
-            name=f"{layer_idx}_Activity",
-            figure=LILayer.plot_states(
-                layer_idx, inputs, states, targets, block_idx, output_size,
-            ),
-            epoch_step=epoch_step,
-        )
-
-        distributions = [
-            ("tau", self.tau_trainer.get_tau().cpu().detach().numpy()),
-            ("weights", self.weight.cpu().detach().numpy()),
-            ("bias", self.bias.cpu().detach().numpy()),
-        ]
-
-        save_distributions_to_aim(
-            logger=logger,
-            distributions=distributions,
-            name=f"{layer_idx}",
-            epoch_step=epoch_step,
-        )

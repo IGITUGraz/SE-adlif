@@ -1,19 +1,16 @@
 from typing import Tuple
-
 import torch
+from torch import Module
 from torch.nn.parameter import Parameter
-from module.lif import BaseSNN
 import torch.nn.functional as F
+from models.helpers import SLAYER
 from module.tau_trainers import TauTrainer, get_tau_trainer_class
-from utils.utils import save_distributions_to_aim, save_fig_to_aim, get_event_indices
-import matplotlib.pyplot as plt
 
-class ALIFLayer(BaseSNN):
+class ALIFLayer(Module):
     __constants__ = ["in_features", "out_features"]
     in_features: int
     out_features: int
     param_beta: torch.Tensor
-    params_decay_adapt: torch.Tensor
     weight: torch.Tensor
 
     def __init__(
@@ -26,19 +23,13 @@ class ALIFLayer(BaseSNN):
         train_soma_tau_method="fixed",  
         tau_adapt: tuple[float, float] = (20, 200),
         train_adapt_tau_method="fixed",
-        use_bias: bool = True,
-        bias_init: float = 0.0,
+
         use_recurrent: bool = True,
         beta: tuple[float, float] = (0.0, 1.0),
-        beta_init: str = "uniform",
-        train_beta: bool = False,
+
         beta2: tuple[float, float] = (0.0, 2.0),
-        beta2_init: str = "uniform",
-        train_beta2: bool = False,
-        initialization_method: str = "uniform",
-        initialization_kwargs: dict = {},
-        surrogate_kwargs: dict = {},
-        adapt_coeff: float = 60.0,
+
+        q: float = 60.0,
         device=None,
         dtype=None,
         **kwargs,
@@ -200,8 +191,10 @@ class ALIFLayer(BaseSNN):
             v_t = decay_v * v_tm1 + (1.0 - decay_v) * (
                 soma_current - b_tm1
             )
-            v_scaled = (v_t - self.thr) / self.thr
-            z_t = self.threshold_func(v_scaled, self.surrogate_kwargs)
+            
+            v_thr = v_t - self.thr
+            # Forward Gradient Injection trick (credits to Sebastian Otte)
+            z_t = torch.heaviside(v_thr, 1.0).detach() + (v_thr - v_thr.detach()) * SLAYER(v_thr, self.alpha, self.c).detach()
             
             b_t = (
                 decay_b * b_tm1
@@ -218,62 +211,3 @@ class ALIFLayer(BaseSNN):
         states = torch.stack([v, z, b], dim=0)
         outputs = torch.stack(outputs, dim=1)
         return outputs, states
-    
-    @staticmethod
-    def plot_states(layer_idx, inputs, states):
-        figure, axes = plt.subplots(
-        nrows=4, ncols=1, sharex='all', figsize=(8, 11))
-        inputs = inputs.cpu().detach().numpy()
-        states = states.cpu().detach().numpy()        
-        axes[0].eventplot(get_event_indices(inputs.T), color='black', orientation='horizontal')
-        axes[0].set_ylabel('input')
-        axes[1].plot(states[0])
-        axes[1].set_ylabel("v_t")
-        axes[2].plot(states[2])
-        axes[2].set_ylabel("b_t")
-        axes[3].eventplot(get_event_indices(states[1].T), color='black', orientation='horizontal')
-        axes[3].set_ylabel("z_t/output")
-        nb_spikes_str = str(states[1].sum())
-        figure.suptitle(f"Layer {layer_idx}\n Nb spikes: {nb_spikes_str},")
-        plt.close(figure)
-        return figure
-
-    def layer_stats(self, layer_idx: int, logger, epoch_step: int, spike_probabilities: torch.Tensor,
-                    inputs: torch.Tensor, states: torch.Tensor, **kwargs):
-        """Generate statistisc from the layer weights and a plot of the layer dynamics for a random task example
-        Args:
-            layer_idx (int): index for the layer in the hierarchy
-            logger (_type_): aim logger reference
-            epoch_step (int): epoch  
-            spike_probability (torch.Tensor): spike probability for each neurons
-            inputs (torch.Tensor): random example 
-            states (torch.Tensor): states associated to the computation of the random example
-        """
-
-        save_fig_to_aim(
-            logger=logger,
-            name=f"{layer_idx}_Activity",
-            figure=ALIFLayer.plot_states(layer_idx, inputs, states),
-            epoch_step=epoch_step,
-        )
-        
-        distributions = [("soma_tau", self.tau_trainer_soma.get_tau().cpu().detach().numpy()),
-                         ("soma_weights", self.weight.cpu().detach().numpy()),
-                         ("adapt_tau", self.tau_trainer_adapt.get_tau().cpu().detach().numpy()),
-                         ("spike_prob", spike_probabilities.cpu().detach().numpy()),
-                         ("beta", self.param_beta.cpu().detach().numpy()),
-                         ("beta2", self.param_beta2.cpu().detach().numpy()),
-                         ("bias", self.bias.cpu().detach().numpy())
-                        ]
-
-        if self.use_recurrent:
-            distributions.append(
-                ("recurrent_weights", self.recurrent.cpu().detach().numpy())
-            
-            )
-        save_distributions_to_aim(
-            logger=logger,
-            distributions=distributions,
-            name=f"{layer_idx}",
-            epoch_step=epoch_step,
-        )
