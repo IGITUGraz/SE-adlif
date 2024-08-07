@@ -6,8 +6,7 @@ overrides:
 # Which cell to use
 cell: se_adlif
 
-# learning rate of the optimizer
-lr: 0.01
+
 
 # number of neurons
 n_neurons: 128
@@ -42,3 +41,13 @@ batch_size: 256
 
 # Loss aggregation
 loss_agg: softmax
+
+# Metric tracking
+tracking_metric: val_acc_epoch
+tracking_mode: max
+
+# optimizer parameters
+# learning rate of the optimizer
+lr: 0.01
+factor: 1.0
+patience: 9999

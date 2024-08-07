@@ -26,6 +26,11 @@ class MLPSNN(pl.LightningModule):
         self.ignore_target_idx = -1
         self.two_layers = cfg.two_layers
         self.output_size = cfg.dataset.num_classes
+        self.tracking_metric = cfg.tracking_metric
+        self.tracking_mode = cfg.tracking_mode
+        self.lr = cfg.lr 
+        self.factor = cfg.factor
+        self.patience = cfg.patience
         self.init_metrics_and_loss(cfg)
 
         self.cell = layer_map[cfg.cell]
@@ -36,10 +41,25 @@ class MLPSNN(pl.LightningModule):
         self.out_layer = LI(cfg)
         self.output_size = cfg.dataset.num_classes
         
-        self.output_func = cfg.get('output_func', 'softmax')
+        self.output_func = cfg.get('loss_agg', 'softmax')
         self.auto_regression =  cfg.get('auto_regression', False)
         self.init_metrics_and_loss()
+    def configure_optimizers(self):
+            optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr)
 
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer=optimizer,
+                mode=self.tracking_mode,
+                factor=self.factor,
+                patience=self.patience,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": lr_scheduler,
+                    "monitor": self.tracking_metric,
+                },
+            }
     def forward(
         self, inputs: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         s1 = self.l1.initial_state(inputs.shape[0], inputs.device)
@@ -101,9 +121,9 @@ class MLPSNN(pl.LightningModule):
                 reduce="mean",
                 include_self=False,
             )
-            blk = blk[:, 1]
+            block_output = block_output[:, 1]
             outputs_reduce = outputs
-            loss = blk.mean()
+            loss = block_output.mean()
         else:
             if self.output_func == "softmax":
                 outputs = torch.softmax(outputs, -1)

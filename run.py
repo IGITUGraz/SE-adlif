@@ -15,8 +15,8 @@ def main(cfg: DictConfig):
     model = MLPSNN(cfg)
     callbacks = []
     model_ckpt_tracker: ModelCheckpoint = ModelCheckpoint(
-        monitor="val_acc_epoch",
-        mode="max",
+        monitor=cfg.get('tracking_metric', "val_acc_epoch"),
+        mode=cfg.get('tracking_mode', 'max'),
         save_last=False,
         save_top_k=1,
         dirpath="ckpt"
