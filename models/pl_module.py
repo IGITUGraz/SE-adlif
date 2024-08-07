@@ -9,12 +9,14 @@ from pytorch_lightning.utilities import grad_norm
 from models.alif import EFAdLIF, SEAdLIF
 from models.li import LI
 from models.lif import LIF
+from models.rnn import LSTMCellWrapper
 
 
 layer_map = {
     "lif": LIF,
     "se_adlif": SEAdLIF,
     "ef_adlif": EFAdLIF,
+    'lstm': LSTMCellWrapper,
 }
 
 

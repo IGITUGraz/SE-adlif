@@ -1,0 +1,57 @@
+# @package _global_
+
+overrides:
+  - /dataset: oscillation
+
+# Which cell to use
+cell: ef_adlif
+
+auto_regression: True
+
+# input size 
+input_size: ${dataset.n_dof}
+# number of neurons
+n_neurons: 200
+
+# Whether to use a two-layer network
+two_layers: False
+
+# Factor for reparametrization of a and b (see paper)
+q: 65
+
+# Parameters of SLAYER
+alpha: 5
+c: 0.4
+
+# Number of epochs
+n_epochs: 200
+use_recurrent: True
+
+# Range of tau_u
+tau_u_range: [5, 25]
+
+# Range of tau_w
+tau_w_range: [60, 300]
+
+# Dropout rate
+dropout: 0.0
+
+# Time constant of output layer 
+tau_out_range: [1, 20]
+train_tau_out_method: 'interpolation'
+
+# Batch size
+batch_size: 256
+
+# Loss aggregation
+loss_agg: MSE
+
+# Metric tracking
+tracking_metric: val_loss_epoch
+tracking_mode: min
+
+# optimizer parameters
+# learning rate of the optimizer
+lr: 0.01
+factor: 0.5
+patience: 15
