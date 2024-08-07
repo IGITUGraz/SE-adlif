@@ -4,6 +4,7 @@ import torch
 import torchmetrics
 from torch.nn import CrossEntropyLoss, MSELoss
 from omegaconf import DictConfig
+from pytorch_lightning.utilities import grad_norm
 
 from models.alif import EFAdLIF, SEAdLIF
 from models.li import LI
@@ -23,6 +24,7 @@ class MLPSNN(pl.LightningModule):
         cfg: DictConfig,
     ) -> None:
         super().__init__()
+        print(cfg)
         self.ignore_target_idx = -1
         self.two_layers = cfg.two_layers
         self.output_size = cfg.dataset.num_classes
@@ -31,19 +33,19 @@ class MLPSNN(pl.LightningModule):
         self.lr = cfg.lr 
         self.factor = cfg.factor
         self.patience = cfg.patience
-        self.init_metrics_and_loss(cfg)
-
+        self.auto_regression =  cfg.get('auto_regression', False)
+        self.output_size = cfg.dataset.num_classes
+        self.batch_size = cfg.dataset.batch_size
         self.cell = layer_map[cfg.cell]
         self.l1 = self.cell(cfg)
         if cfg.two_layers:
             cfg.input_size = cfg.n_neurons
             self.l2 = self.cell(cfg)
         self.out_layer = LI(cfg)
-        self.output_size = cfg.dataset.num_classes
         
         self.output_func = cfg.get('loss_agg', 'softmax')
-        self.auto_regression =  cfg.get('auto_regression', False)
         self.init_metrics_and_loss()
+
     def configure_optimizers(self):
             optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr)
 
@@ -70,7 +72,7 @@ class MLPSNN(pl.LightningModule):
         single_step_prediction_limit = int(math.ceil(inputs.shape[1] * 0.5))
         for t, x_t in enumerate(inputs.unbind(1)):
             if self.auto_regression and t >= single_step_prediction_limit:
-                x_t = out
+                x_t = out.detach()
             out, s1 = self.l1(x_t, s1)
             if self.two_layers:
                 out, s2 = self.l2(out, s2)

@@ -40,7 +40,7 @@ class LIF(Module):
         self.in_features = cfg.input_size
         self.out_features = cfg.n_neurons
         self.dt = 1.0
-        self.tau_u_range = cfg.get('tau_u_range', [20, 20])
+        self.tau_u_range = cfg.tau_u_range
         self.train_tau_u_method = cfg.get('train_tau_u_method', 'interpolation')
         
         self.use_recurrent = cfg.get('use_recurrent', True)

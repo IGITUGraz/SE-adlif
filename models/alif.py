@@ -142,7 +142,7 @@ class EFAdLIF(Module):
         u_thr = u_t - self.thr
         # Forward Gradient Injection trick (credits to Sebastian Otte)
         z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
-        u_t = u_t * (1.0 - z_t.detach())
+        u_t = u_t * (1 - z_t.detach())
         w_t = (
             decay_w * w_tm1
             + (1.0 - decay_w) * (self.a * u_tm1 + self.b * z_tm1) * self.q
@@ -167,7 +167,8 @@ class SEAdLIF(EFAdLIF):
         # Forward Gradient Injection trick (credits to Sebastian Otte)
         z_t = torch.heaviside(u_thr, torch.as_tensor(0.0).type(u_thr.dtype)).detach() + (u_thr - u_thr.detach()) * SLAYER(u_thr, self.alpha, self.c).detach()
         # Symplectic formulation with early reset
-        u_t = u_t * (1.0 - z_t.detach())
+
+        u_t = u_t * (1 - z_t.detach())
         w_t = (
             decay_w * w_tm1
             + (1.0 - decay_w) * (self.a * u_t + self.b * z_t) * self.q

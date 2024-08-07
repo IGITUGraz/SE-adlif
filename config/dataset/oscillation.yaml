@@ -1,0 +1,18 @@
+# class_path: datasets.pl_dataset.SHDLDM
+# init_args:
+_target_: datasets.oscillation.OscilatorTask
+name: Oscilation task
+required_model_size: small
+n_dof: 4
+mass_range: [1, 1]
+spring_range: [500, 10_000]
+damping_range: [0, 0]
+max_freq: 200
+duration: 0.5
+num_sample: 4096
+batch_size: 256
+num_workers: 8
+fits_into_ram: false
+num_classes: ${dataset.n_dof}
+random_initial_velocity: False
+mask_first_n_percent: 0.0

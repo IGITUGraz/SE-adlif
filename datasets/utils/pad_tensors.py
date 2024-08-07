@@ -16,8 +16,10 @@ class PadTensors:
         target_list, batch_first=batch_first, padding_value=-1) 
 
         # Padding block (zero-valued time steps of the block_idx) MUST have target of -1 !!
-        target = torch.concatenate((torch.full((target.shape[0], 1), fill_value=-1), target), dim=1)
-
+        # target = torch.concatenate((torch.full((target.shape[0], 1), fill_value=-1), target), dim=1)
+        dummy_target = torch.full_like(target[:, 0], fill_value=-1).unsqueeze(1)
+        
+        target = torch.concatenate((dummy_target, target), dim=1)
         inputs = pad_sequence(inputs, batch_first=batch_first, padding_value=0)
 
         block_idx = pad_sequence(

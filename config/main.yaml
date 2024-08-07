@@ -7,7 +7,7 @@ random_seed: 42
 
 logdir: ./results
 
-datadir: ???
+datadir: ./data
 
 hydra:  
   job:
