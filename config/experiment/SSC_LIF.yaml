@@ -34,7 +34,7 @@ tau_out_range: [15, 15]
 batch_size: 256
 
 # Loss aggregation
-loss_agg: summed_membrane_potentials
+loss_agg: mean_membrane_potentials
 
 # Metric tracking
 tracking_metric: val_acc

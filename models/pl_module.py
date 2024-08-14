@@ -131,6 +131,9 @@ class MLPSNN(pl.LightningModule):
         else:
             if self.output_func == "softmax":
                 outputs = torch.softmax(outputs, -1)
+                reduction = "sum"
+            else:
+                reduction = "mean"
             # create a zero array of size (batch, number_of_targets, number_of_classes)
             # this will be used to defined the prediction for each targets for each classes
             block_outputs = torch.zeros(
@@ -145,7 +148,7 @@ class MLPSNN(pl.LightningModule):
                 dim=1,
                 index=block_idx.broadcast_to(outputs.shape),
                 src=outputs,
-                reduce="sum",
+                reduce=reduction,
                 include_self=False,
             )
 

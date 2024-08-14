@@ -31,7 +31,6 @@ class SSCLDM(pl.LightningDataModule):
         super().__init__()
         # workaround in order to use the same training loop
         # for classification and context processing
-        self.context_size = 1
         self.data_path = data_path
         self.spatial_factor = spatial_factor
         self.time_factor = time_factor

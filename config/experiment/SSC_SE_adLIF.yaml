@@ -5,7 +5,7 @@ defaults:
 exp_name: SSC_SE_adLIF
 
 # Which cell to use
-cell: ef_adlif
+cell: se_adlif
 
 # number of neurons
 n_neurons: 720
@@ -39,7 +39,7 @@ tau_out_range: [15, 15]
 batch_size: 256
 
 # Loss aggregation
-loss_agg: summed_membrane_potentials
+loss_agg: mean_membrane_potentials
 
 # Metric tracking
 tracking_metric: val_acc
