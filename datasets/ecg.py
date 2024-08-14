@@ -31,7 +31,7 @@ def convert_dataset_wtime(mat_data):
     return dt, X, Y
 
 
-class QTDB_ECGLDM(pl.LightningDataModule):
+class ECGLDM(pl.LightningDataModule):
     def __init__(
         self,
         data_path: str,
@@ -41,8 +41,6 @@ class QTDB_ECGLDM(pl.LightningDataModule):
         batch_size=256,
         num_workers=0,
         burn_in_time=0,
-        name: str = None,  # for hydra
-        required_model_size: str = None,  # for hydra
         num_classes: int = 6,  # for hydra
     ) -> None:
         super().__init__()
@@ -54,7 +52,7 @@ class QTDB_ECGLDM(pl.LightningDataModule):
         self.random_seed = random_seed
         self.burn_in_time = burn_in_time
 
-        self.collate_fn = PadTensors(batch_first=True, contextual=False)
+        self.collate_fn = PadTensors(batch_first=True)
         self.generator = torch.Generator().manual_seed(random_seed)
 
     def prepare_data(self):

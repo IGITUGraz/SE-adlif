@@ -1,7 +1,7 @@
-_target_: datasets.qtdb_ecg.QTDB_ECGLDM
+_target_: datasets.ecg.ECGLDM
 data_path: ${datadir}
 batch_size: 64
-num_workers: 12
+num_workers: 8
 num_classes: 6
 valid_fraction: 0.05
 random_seed: 42

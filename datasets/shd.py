@@ -4,7 +4,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.utils.data
-from traitlets import Callable
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from datasets.utils.pad_tensors import PadTensors
@@ -25,15 +24,17 @@ class SHDWrapper(SHD):
         self,
         save_to: str,
         train: bool = True,
-        transform: Optional[Callable] = None,
-        target_transform: Optional[Callable] = None,
-        get_metadata: bool = False,
+        transform = None,
+        target_transform = None,
+        ignore_first_timesteps: int = 10,
     ):
         super().__init__(save_to, train, transform, target_transform)
+        self.ignore_first_timesteps = ignore_first_timesteps
 
     def __getitem__(self, index):
         events, target = super().__getitem__(index)
         block_idx = torch.ones((events.shape[0],), dtype=torch.int64)
+        block_idx[:self.ignore_first_timesteps] = 0
         return events, target, block_idx
 
 
@@ -44,7 +45,6 @@ class SHDLDM(pl.LightningDataModule):
         spatial_factor: float = 0.12,
         time_factor: float = 1e-3,
         window_size: float = 5.0,
-        duration_ratio: float = 0.4,
         split_percent: float = 0.8,
         batch_size: int = 32,
         num_workers: int = 1,
@@ -56,6 +56,7 @@ class SHDLDM(pl.LightningDataModule):
         validate_on=0.05,
         additional_test_set_validation: bool = False,
         random_seed=42,
+        ignore_first_timesteps: int = 10,
     ) -> None:
         super().__init__()
         # workaround in order to use the same training loop
@@ -64,7 +65,6 @@ class SHDLDM(pl.LightningDataModule):
         self.spatial_factor = spatial_factor
         self.time_factor = time_factor
         self.window_size = window_size
-        self.duration_ratio = duration_ratio
         self.split_percent = split_percent
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -78,6 +78,7 @@ class SHDLDM(pl.LightningDataModule):
         # the transformation will add zeros at the right side
         # of a length based on the original size of the data-sample
         self.pad_to_min_size = pad_to_min_size
+        self.ignore_first_timesteps = ignore_first_timesteps
 
         sensor_size = SHDWrapper.sensor_size
         sensor_size = (
@@ -120,7 +121,6 @@ class SHDLDM(pl.LightningDataModule):
 
         if test_bias_variant == "noise":
             test_transform_list = [
-                TakeEventByTime(self.duration_ratio),
                 AddNoiseByproportion(
                     self.bias_for_test_set,
                     is_frame=False,
@@ -136,7 +136,6 @@ class SHDLDM(pl.LightningDataModule):
             ]
         else:
             test_transform_list = [
-                TakeEventByTime(self.duration_ratio),
                 tonic.transforms.Downsample(
                     time_factor=self.time_factor, spatial_factor=self.spatial_factor
                 ),
@@ -148,7 +147,6 @@ class SHDLDM(pl.LightningDataModule):
 
         self.static_data_transform_train_val = tonic.transforms.Compose(
             [
-                TakeEventByTime(self.duration_ratio),
                 tonic.transforms.Downsample(
                     time_factor=self.time_factor, spatial_factor=self.spatial_factor
                 ),
@@ -170,38 +168,36 @@ class SHDLDM(pl.LightningDataModule):
             )
 
         self.generator = torch.Generator().manual_seed(self.random_seed)
-
-    def prepare_data(self):
         self.data_test = SHDWrapper(
-            get_metadata=self.get_metadata,
             save_to=self.data_path,
             transform=self.static_data_transform_test,
             train=False,
+            ignore_first_timesteps=self.ignore_first_timesteps,
         )
 
         # validate on the test set
         if self.validate_on == "test":
             self.data_train = SHDWrapper(
-                get_metadata=self.get_metadata,
                 save_to=self.data_path,
                 transform=self.static_data_transform_train_val,
                 train=True,
+                ignore_first_timesteps=self.ignore_first_timesteps,
             )
 
             self.data_val = SHDWrapper(
-                get_metadata=self.get_metadata,
                 save_to=self.data_path,
                 transform=self.static_data_transform_train_val,
                 train=False,
+                ignore_first_timesteps=self.ignore_first_timesteps,
             )
 
         # validate on a percentage of the training set
         elif isinstance(self.validate_on, float):
             self.train_val_ds = SHDWrapper(
-                get_metadata=self.get_metadata,
                 save_to=self.data_path,
                 transform=self.static_data_transform_train_val,
                 train=True,
+                ignore_first_timesteps=self.ignore_first_timesteps,
             )
             valid_len = math.floor(len(self.train_val_ds) * self.validate_on)
             self.data_train, self.data_val = torch.utils.data.random_split(
@@ -211,6 +207,10 @@ class SHDLDM(pl.LightningDataModule):
             )
         else:
             raise ValueError(f"validate_on {self.validate_on} is not valid")
+
+    def prepare_data(self):
+        pass
+        
 
     def setup(self, stage: Optional[str] = None) -> None:
         pass

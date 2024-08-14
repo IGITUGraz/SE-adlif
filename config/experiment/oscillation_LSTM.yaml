@@ -1,7 +1,9 @@
 # @package _global_
 
-overrides:
+defaults:
   - /dataset: oscillation
+
+exp_name: oscillation_LSTM
 
 # Which cell to use
 cell: lstm
@@ -36,7 +38,7 @@ batch_size: 256
 loss_agg: MSE
 
 # Metric tracking
-tracking_metric: val_loss_epoch
+tracking_metric: val_loss
 tracking_mode: min
 
 # optimizer parameters

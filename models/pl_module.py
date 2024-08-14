@@ -33,37 +33,30 @@ class MLPSNN(pl.LightningModule):
         self.tracking_metric = cfg.tracking_metric
         self.tracking_mode = cfg.tracking_mode
         self.lr = cfg.lr 
+
+        # For learning rate scheduling (used for oscillation task)
         self.factor = cfg.factor
         self.patience = cfg.patience
+
         self.auto_regression =  cfg.get('auto_regression', False)
         self.output_size = cfg.dataset.num_classes
         self.batch_size = cfg.dataset.batch_size
+
+        # Define the model
         self.cell = layer_map[cfg.cell]
         self.l1 = self.cell(cfg)
+        self.dropout = cfg.dropout
         if cfg.two_layers:
             cfg.input_size = cfg.n_neurons
             self.l2 = self.cell(cfg)
+        cfg.input_size = cfg.n_neurons
         self.out_layer = LI(cfg)
         
         self.output_func = cfg.get('loss_agg', 'softmax')
         self.init_metrics_and_loss()
+        self.save_hyperparameters()
 
-    def configure_optimizers(self):
-            optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr)
-
-            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer=optimizer,
-                mode=self.tracking_mode,
-                factor=self.factor,
-                patience=self.patience,
-            )
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {
-                    "scheduler": lr_scheduler,
-                    "monitor": self.tracking_metric,
-                },
-            }
+    # @torch.compile
     def forward(
         self, inputs: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
         s1 = self.l1.initial_state(inputs.shape[0], inputs.device)
@@ -72,13 +65,20 @@ class MLPSNN(pl.LightningModule):
             s2 = self.l2.initial_state(inputs.shape[0], inputs.device)
         out_sequence = []
         single_step_prediction_limit = int(math.ceil(inputs.shape[1] * 0.5))
+
+        # Iterate over each time step in the data
         for t, x_t in enumerate(inputs.unbind(1)):
+
+            # Auto-regression for oscillator task
             if self.auto_regression and t >= single_step_prediction_limit:
                 x_t = out.detach()
             out, s1 = self.l1(x_t, s1)
+            out = torch.nn.functional.dropout(out, p=self.dropout, training=self.training)
             if self.two_layers:
                 out, s2 = self.l2(out, s2)
+                out = torch.nn.functional.dropout(out, p=self.dropout, training=self.training)
             out, s_out = self.out_layer(out, s_out)
+            # out[:,0] += 100
             out_sequence.append(out)
             
         return torch.stack(out_sequence, dim=1)
@@ -149,10 +149,13 @@ class MLPSNN(pl.LightningModule):
                 include_self=False,
             )
 
+
             outputs_reduce = block_output.reshape(-1, outputs.size(-1))
             targets_reduce = targets.flatten()
 
-            loss = self.loss(outputs_reduce.float(), targets_reduce)
+            block_mask = torch.where(targets_reduce != self.ignore_target_idx)
+
+            loss = self.loss(outputs_reduce[block_mask].float(), targets_reduce[block_mask])
         return (outputs_reduce, loss, block_idx)
 
     def update_and_log_metrics(
@@ -194,16 +197,14 @@ class MLPSNN(pl.LightningModule):
             metrics,
             prog_bar=True,
             on_epoch=True,
-            on_step=True,
-            batch_size=self.batch_size,
+            on_step=True if prefix == "train_" else False,
         )
         self.log(
             f"{prefix}loss",
             loss,
             prog_bar=True,
             on_epoch=True,
-            on_step=True,
-            batch_size=self.batch_size,
+            on_step=True if prefix == "train_" else False,
         )
 
     def training_step(self, batch, batch_idx):
@@ -289,3 +290,20 @@ class MLPSNN(pl.LightningModule):
         self.train_metric = metrics.clone(prefix="train_")
         self.val_metric = metrics.clone(prefix="val_")
         self.test_metric = metrics.clone(prefix="test_")
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(params=self.parameters(), lr=self.lr)
+
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer=optimizer,
+            mode=self.tracking_mode,
+            factor=self.factor,
+            patience=self.patience,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": lr_scheduler,
+                "monitor": self.tracking_metric,
+            },
+        }

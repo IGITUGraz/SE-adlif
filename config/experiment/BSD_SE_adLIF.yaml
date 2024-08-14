@@ -1,17 +1,18 @@
 # @package _global_
-defaults:
-  - /dataset: ssc
 
-exp_name: SSC_SE_adLIF
+defaults:
+  - /dataset: bsd
+
+exp_name: BSD_SE_adLIF
 
 # Which cell to use
-cell: ef_adlif
+cell: se_adlif
 
 # number of neurons
-n_neurons: 720
+n_neurons: 510
 
 # Whether to use a two-layer network
-two_layers: true
+two_layers: false
 
 # Factor for reparametrization of a and b (see paper)
 q: 120
@@ -21,7 +22,7 @@ alpha: 5
 c: 0.4
 
 # Number of epochs
-n_epochs: 40
+n_epochs: 400
 
 # Range of tau_u
 tau_u_range: [5, 25]
@@ -30,16 +31,16 @@ tau_u_range: [5, 25]
 tau_w_range: [60, 300]
 
 # Dropout rate
-dropout: 0.15
+dropout: 0
 
 # Time constant of output layer 
 tau_out_range: [15, 15]
 
 # Batch size
-batch_size: 256
+batch_size: 128
 
 # Loss aggregation
-loss_agg: summed_membrane_potentials
+loss_agg: softmax
 
 # Metric tracking
 tracking_metric: val_acc
@@ -47,9 +48,9 @@ tracking_mode: max
 
 # optimizer parameters
 # learning rate of the optimizer
-lr: 6e-3
+lr: 0.01
 factor: 0.9
-patience: 9999
+patience: 9999 # no lr decay
 
-# input size of preprocessed SSC
-input_size: 140
+# input size of BSD
+input_size: 10

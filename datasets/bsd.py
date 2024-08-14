@@ -10,8 +10,8 @@ import random
 import matplotlib.pyplot as plt
 
 
-class TemporalGaussianArrayPoisson(Dataset):
-    dataset_name = "TemporalGaussianArrayPoisson"
+class BurstSequenceDetection(Dataset):
+    dataset_name = "BurstSequenceDetection"
 
     def __init__(
         self,
@@ -86,7 +86,7 @@ class TemporalGaussianArrayPoisson(Dataset):
                 t, n_channels, means, variances, dt, spike_prob_min, spike_prob_max, rng
             )
             inputs = torch.tensor(sample, dtype=torch.float32)
-            targets = torch.tensor(class_id, dtype=torch.int32)
+            targets = torch.tensor(class_id, dtype=torch.int64)
 
             ### End Temporal gaussian array
             inputs = inputs.transpose(0, 1)
@@ -117,7 +117,7 @@ class TemporalGaussianArrayPoisson(Dataset):
     #     sample = self.data[index][0].numpy()
 
 
-class TemporalGaussianArrayPoissonDM(pl.LightningDataModule):
+class BSDLDM(pl.LightningDataModule):
     def __init__(
         self,
         batch_size: int,
@@ -143,7 +143,7 @@ class TemporalGaussianArrayPoissonDM(pl.LightningDataModule):
     ) -> None:
         super().__init__()
 
-        self.collate_fn = PadTensors(contextual=False)
+        self.collate_fn = PadTensors()
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.val_split = val_split
@@ -165,7 +165,7 @@ class TemporalGaussianArrayPoissonDM(pl.LightningDataModule):
         self.class_parameters = initialize_class_parameters(
             num_classes, n_channels, n_common_channels, rng
         )
-        self.gen_dataset = TemporalGaussianArrayPoisson(
+        self.gen_dataset = BurstSequenceDetection(
             sampling_freq=sampling_freq,
             sample_len=sample_len,
             min_num_sample=min_num_sample,
@@ -368,25 +368,3 @@ def generate_sample_parameters(
     variances[common_channels] = class_variances
 
     return means, variances
-
-
-# def create_dataset(t, n_samples, n_channels, n_classes, n_common_channels, dt, spike_prob_min, spike_prob_max, random_seed):
-#     rng = np.random.default_rng(random_seed)
-#     class_parameters = initialize_class_parameters(n_classes, n_channels, n_common_channels)
-#     dataset = []
-#     labels = []
-
-#     for i in range(n_samples):
-#         class_id = i % n_classes  # Assign class in a round-robin fashion
-#         class_means, class_variances, common_channels = class_parameters[class_id]
-
-#         means, variances = generate_sample_parameters(n_channels, class_means, class_variances, n_common_channels, common_channels)
-#         means *= t
-#         sample = create_sample(t, n_channels, means, variances, dt, spike_prob_min, spike_prob_max, rng)
-#         #temporal_gaussian = generate_gaussian_burst_spike_rate(mean, variance, spike_prob_min, spike_prob_max, t, dt)
-#         #spike_train = generate_spike_train_from_time_varying_rate_random(temporal_gaussian, dt)
-
-#         dataset.append(sample)
-#         labels.append(class_id)
-
-#     return np.array(dataset), np.array(labels), class_parameters

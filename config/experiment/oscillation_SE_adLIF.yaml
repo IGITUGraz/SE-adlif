@@ -1,7 +1,9 @@
 # @package _global_
 
-overrides:
+defaults:
   - /dataset: oscillation
+
+exp_name: oscillation_SE_adLIF
 
 # Which cell to use
 cell: se_adlif
@@ -47,7 +49,7 @@ batch_size: 256
 loss_agg: MSE
 
 # Metric tracking
-tracking_metric: val_loss_epoch
+tracking_metric: val_loss
 tracking_mode: min
 
 # optimizer parameters

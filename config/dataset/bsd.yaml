@@ -1,5 +1,4 @@
-_target_: datasets.temporal_gaussian_array_poisson.TemporalGaussianArrayPoissonDM
-name: Temporal Gaussian Array Poisson
+_target_: datasets.bsd.BSDLDM
 batch_size: 128
 num_workers: 8
 sampling_freq: 1000
@@ -10,7 +9,7 @@ delay_between_sample: 10
 num_sample_per_epoch: 8000
 S: 200
 n_channels: 10
-num_classes: 20
+num_classes: 20 # Number of classes
 n_common_channels: 3
 t: 20
 dt: 0.1

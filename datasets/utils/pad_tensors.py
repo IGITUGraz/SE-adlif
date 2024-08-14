@@ -12,6 +12,10 @@ class PadTensors:
     def _call(batch, batch_first: bool):        
         inputs, target_list, block_idx = list(zip(*batch))  # type: ignore
 
+        # If target is a scalar, convert it to a tensor
+        if len(target_list[0].shape) == 0:
+            target_list = torch.tensor(target_list).unsqueeze(1)
+
         target = pad_sequence(
         target_list, batch_first=batch_first, padding_value=-1) 
 

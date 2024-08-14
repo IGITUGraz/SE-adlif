@@ -80,7 +80,7 @@ class LI(Module):
         decay_u = self.tau_u_trainer.get_decay()
         current = F.linear(input_tensor, self.weight, self.bias)
         u_t = decay_u * u_tm1 + (1.0 - decay_u) * current
-        return u_t, u_t
+        return u_t.clone(), u_t
 
     def apply_parameter_constraints(self):
         self.tau_u_trainer.apply_parameter_constraints()

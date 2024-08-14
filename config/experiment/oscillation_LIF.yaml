@@ -1,7 +1,9 @@
 # @package _global_
 
-overrides:
+defaults:
   - /dataset: oscillation
+
+exp_name: oscillation_LIF
 
 # Which cell to use
 cell: lif
@@ -10,6 +12,7 @@ auto_regression: True
 
 # input size 
 input_size: ${dataset.n_dof}
+
 # number of neurons
 n_neurons: 200
 
@@ -27,8 +30,6 @@ use_recurrent: True
 # Range of tau_u
 tau_u_range: [1, 25]
 
-
-
 # Dropout rate
 dropout: 0.0
 
@@ -43,7 +44,7 @@ batch_size: 256
 loss_agg: MSE
 
 # Metric tracking
-tracking_metric: val_loss_epoch
+tracking_metric: val_loss
 tracking_mode: min
 
 # optimizer parameters

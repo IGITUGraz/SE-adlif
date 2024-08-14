@@ -1,54 +1,32 @@
-from copy import deepcopy
-from logging import Logger
 import math
-import os
-from typing import Optional, Union
-import debugpy
+from typing import Optional
 
-import numpy as np
-import numpy.lib.recfunctions
 import torch
 import torch.utils.data
-from traitlets import Callable
-from datasets.cached_dataset import DiskCachedDataset
 
-# from tonic import DiskCachedDataset
 from torch.utils.data import DataLoader
-from datasets.dataset import Dataset
 import pytorch_lightning as pl
-from pathlib import Path
 from datasets.utils.pad_tensors import PadTensors
-from functional.transforms import (
-    PhaseContextTransform,
-    PoissonContextTransform,
+from datasets.utils.transforms import (
     TakeEventByTime,
-    ToFrame,
-    BinarizeFrame,
-    Denoise1D,
+    Flatten,
 )
-from functional.utils import Flatten
 import tonic
-from tonic.datasets.hsd import SHD
-import h5py
-from tonic.io import make_structured_array
-from tonic.transforms import CropTime
-from torch.utils import data
-from torch.nn import AvgPool2d, AvgPool1d
+from tonic.transforms import ToFrame
 
 
 class SSCLDM(pl.LightningDataModule):
     def __init__(
         self,
         data_path: str,
-        cache_root: str = None,
         spatial_factor: float = 0.2,
         time_factor: float = 1e-3,
         window_size: float = 4.0,
         batch_size: int = 256,
         num_workers: int = 1,
         pad_to_min_size: int = 300,
-        name: str = None,  # for hydra
         num_classes: int = 35,
+        ignore_first_timesteps: int = 10,
     ) -> None:
         super().__init__()
         # workaround in order to use the same training loop
@@ -60,8 +38,9 @@ class SSCLDM(pl.LightningDataModule):
         self.window_size = window_size
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.collate_fn = PadTensors(sparse_data=False, contextual=False)
+        self.collate_fn = PadTensors()
         self.min_len = pad_to_min_size
+        self.ignore_first_timesteps = ignore_first_timesteps
 
         sensor_size = tonic.datasets.SSC.sensor_size
         sensor_size = (
@@ -92,7 +71,6 @@ class SSCLDM(pl.LightningDataModule):
             def pad_to_min_len(x):
                 return x
         transform_list = [
-            TakeEventByTime(self.duration_ratio),
             tonic.transforms.Downsample(
                 time_factor=self.time_factor, spatial_factor=self.spatial_factor
             ),
@@ -100,6 +78,7 @@ class SSCLDM(pl.LightningDataModule):
             pad_to_min_len,
             Flatten(),
         ]
+        self.static_data_transform = tonic.transforms.Compose(transform_list)
 
     def prepare_data(self):
         pass
@@ -109,19 +88,19 @@ class SSCLDM(pl.LightningDataModule):
             save_to=self.data_path,
             split="train",
             transform=self.static_data_transform,
-            get_metadata=self.get_metadata,
+            ignore_first_timesteps=self.ignore_first_timesteps
         )
         self.data_test = SSCWrapper(
             save_to=self.data_path,
             split="test",
             transform=self.static_data_transform,
-            get_metadata=self.get_metadata,
+            ignore_first_timesteps=self.ignore_first_timesteps
         )
         self.data_val = SSCWrapper(
             save_to=self.data_path,
             split="valid",
             transform=self.static_data_transform,
-            get_metadata=self.get_metadata,
+            ignore_first_timesteps=self.ignore_first_timesteps
         )
 
     def train_dataloader(self):
@@ -180,12 +159,15 @@ class SSCWrapper(tonic.datasets.SSC):
         self,
         save_to: str,
         split: str = "train",
-        transform: Optional[Callable] = None,
-        target_transform: Optional[Callable] = None,
+        transform = None,
+        target_transform = None,
+        ignore_first_timesteps: int = 10,
     ):
         super().__init__(save_to, split, transform, target_transform)
+        self.ignore_first_timesteps = ignore_first_timesteps
 
     def __getitem__(self, index):
         events, target = super().__getitem__(index)
         block_idx = torch.ones((events.shape[0],), dtype=torch.int64)
+        block_idx[: self.ignore_first_timesteps] = 0
         return events, target, block_idx

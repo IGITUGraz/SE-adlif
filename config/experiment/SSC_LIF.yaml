@@ -1,11 +1,12 @@
 # @package _global_
+
 defaults:
   - /dataset: ssc
 
-exp_name: SSC_SE_adLIF
+exp_name: SSC_LIF
 
 # Which cell to use
-cell: ef_adlif
+cell: lif
 
 # number of neurons
 n_neurons: 720
@@ -13,21 +14,15 @@ n_neurons: 720
 # Whether to use a two-layer network
 two_layers: true
 
-# Factor for reparametrization of a and b (see paper)
-q: 120
-
 # Parameters of SLAYER
 alpha: 5
-c: 0.4
+c: 0.1
 
 # Number of epochs
 n_epochs: 40
 
 # Range of tau_u
 tau_u_range: [5, 25]
-
-# Range of tau_w
-tau_w_range: [60, 300]
 
 # Dropout rate
 dropout: 0.15

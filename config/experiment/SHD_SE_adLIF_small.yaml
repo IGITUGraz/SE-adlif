@@ -1,12 +1,12 @@
 # @package _global_
 
-overrides:
+defaults:
   - /dataset: shd
+
+exp_name: SHD_SE_adLIF_small
 
 # Which cell to use
 cell: se_adlif
-
-
 
 # number of neurons
 n_neurons: 128
@@ -43,11 +43,14 @@ batch_size: 256
 loss_agg: softmax
 
 # Metric tracking
-tracking_metric: val_acc_epoch
+tracking_metric: val_acc
 tracking_mode: max
 
 # optimizer parameters
 # learning rate of the optimizer
 lr: 0.01
-factor: 1.0
+factor: 0.9
 patience: 9999
+
+# input size of preprocessed SHD
+input_size: 140

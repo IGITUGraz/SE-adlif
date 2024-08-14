@@ -7,23 +7,37 @@ Shield: [![CC BY-SA 4.0][cc-by-sa-shield]][cc-by-sa]
 
 Install dependencies 
 
-`pip install -r requirements.yml`
+`conda env create -f environment.yml`
 
 ## Reproducing results
 
 Start the corresponding experiment with
 
-`python run.py experiment <experiment name> ++logdir path/to/my/logdir ++datadir path/to/my/datadir`
+`python run.py experiment=<experiment name> ++logdir=path/to/my/logdir ++datadir=path/to/my/datadir`
 
-where experiment name corresponds to one of the experiments in the config/experiment folder.
+The datadir is mandatory, it should contain the datasets. For SHD and SSC, the data will be downloaded if it does not exist at the defined location (datadir/SHDWrapper). For BSD, the dataset is created on the fly, so the datadir can point to an empty directory.
+
+The resultdir is optional. By default, results will be placed in a local 'results' folder in the root direcory of this repo.
+
+\<experiment name\> corresponds to one of the experiments in the ./config/experiment folder.
+
 
 For configuration, we use [Hydra](https://hydra.cc/). To override any parameter, use the ++ syntax. Example to override number of training epochs:
 
-`python run.py experiment SHD_SE_adLIF_small ++logdir path/to/my/logdir ++datadir path/to/my/datadir ++n_epochs=10`
+`python run.py experiment=SHD_SE_adLIF_small ++logdir=path/to/my/logdir ++datadir=path/to/my/datadir ++n_epochs=10`
+
+To run the BSD task with a different number of classes (Figure 6b), run
+
+`python run.py experiment=BSD_SE_adLIF ++logdir=path/to/my/logdir ++datadir=path/to/my/datadir ++dataset.num_classes=10`
+
 
 ## Important infos
 
-### Block layout
+### main.yaml
+
+In config/main.yaml, global parameters can be set, for example a device (e.g. 'cpu', 'cuda:0') that will be used by the SingleDeviceStrategy from Pytorch Lightning.
+
+### Block index padding
 
 In some tasks (e.g. SHD and SSC) we have to deal with different-length sequences within the same minibatch. We handle this case by a custom masking procedure, using a block index array (block_idx) for each data sample, which acts similar to a mask. We append zeros to samples of shorter sequence length to ensure uniform sequence length within a batch, but mask the padded timesteps with zeros in the block_idx array. The value in the block_idx array then gives the corresponding target class in the target vector. Example
 

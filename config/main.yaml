@@ -1,13 +1,14 @@
 defaults:
   - _self_
-  - dataset: shd
-  - experiment: SHD_SE_adLIF_small
+  - override hydra/job_logging: none # to disable hydra logging
 
 random_seed: 42
 
 logdir: ./results
 
-datadir: ./data
+datadir: ???
+
+device: cuda:0
 
 hydra:  
   job:

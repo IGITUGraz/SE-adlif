@@ -8,3 +8,4 @@ batch_size: 256
 num_workers: 8
 num_classes: 20
 validate_on: test
+ignore_first_timesteps: 10

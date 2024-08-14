@@ -1,0 +1,56 @@
+# @package _global_
+
+defaults:
+  - /dataset: ecg
+
+exp_name: ECG_SE_adLIF_1layer
+
+# Which cell to use
+cell: se_adlif
+
+# number of neurons
+n_neurons: 36
+
+# Whether to use a two-layer network
+two_layers: false
+
+# Factor for reparametrization of a and b (see paper)
+q: 120
+
+# Parameters of SLAYER
+alpha: 5
+c: 0.2
+
+# Number of epochs
+n_epochs: 400
+
+# Range of tau_u
+tau_u_range: [5, 25]
+
+# Range of tau_w
+tau_w_range: [60, 300]
+
+# Dropout rate
+dropout: 0.15
+
+# Time constant of output layer 
+tau_out_range: [3,3]
+
+# Batch size
+batch_size: 64
+
+# Loss aggregation
+loss_agg: summed_membrane_potentials
+
+# Metric tracking
+tracking_metric: val_acc
+tracking_mode: max
+
+# optimizer parameters
+# learning rate of the optimizer
+lr: 0.01
+factor: 0.9
+patience: 9999 # no lr decay
+
+# input size of ECG
+input_size: 4
